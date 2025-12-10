@@ -1,179 +1,219 @@
-# File Processing Workflow
+# Aesthetics AI Service - Use Cases Overview
 
-## Overview
-
-The system processes three types of files: Regular PDFs, Scanned PDFs (images), and Image files. Each type uses different extraction methods to analyze healthcare-related content.
+This document provides a high-level overview of all working use cases in the Aesthetics AI orchestration service.
 
 ---
 
-## Processing Flow Diagram
+## 1. General Chat Query (Ask)
 
+**Purpose:** Handle user questions about services, treatments, doctors, and healthcare information through conversational chat.
+
+**Key Features:**
+- Users can ask any healthcare-related question through text input
+- System searches database for services, doctors, pricing, and treatment information
+- Provides personalized responses with recommendations and next steps
+- Maintains conversation context throughout the session
+
+**Flow:**
+```mermaid
+flowchart LR
+    A[User Input] --> B[Security Check]
+    B --> C[Query Database]
+    C --> D[Generate Response]
+    D --> E[Return Answer]
+```
+
+---
+
+## 2. Pre-Consultation Assessment (Booking Chat)
+
+**Purpose:** Conduct automated pre-consultation assessment for booked appointments by asking structured questions to gather patient information.
+
+**Key Features:**
+- Asks 5-10 questions (mix of MCQ, text, and image upload requests)
+- Gathers patient concerns, medical history, expectations, and visual assessments
+- Automatically saves assessment summary to database for doctor review
+- Supports three question types: multiple choice, open-ended text, and file upload
+
+**Flow:**
 ```mermaid
 flowchart TD
-    A[File Upload] --> B{File Type?}
-    B -->|PDF| C[Extract Text with PyPDF2]
-    B -->|Image| H[OpenAI Vision API]
-    
-    C --> D{Text Extracted?}
-    D -->|Yes| E[Process Text]
-    D -->|No| F[Convert PDF to Images]
-    F --> G[OCR with pytesseract]
-    G --> E
-    
-    E --> I[Check Healthcare Relevance]
-    H --> I
-    
-    I --> J{Healthcare Related?}
-    J -->|Yes| K[Identify Document Type]
-    J -->|No| L[Skip Processing]
-    
-    K --> M[Generate AI Summary]
-    M --> N[Save to Database]
+    A[Booking Slot ID] --> B[Initial Greeting]
+    B --> C[Ask Question 1]
+    C --> D[User Response]
+    D --> E{More Questions?}
+    E -->|Yes| C
+    E -->|No| F[Save Summary]
+    F --> G[Complete]
 ```
 
 ---
 
-## Type 1: Regular PDF Processing
+## 3. File Processing & Validation
 
-**Method:** Text extraction using PyPDF2
+**Purpose:** Process uploaded medical documents (PDFs, images) and extract healthcare information with automatic validations. When prescription files are uploaded, automatically validates products and checks for allergy conflicts.
 
-**Code Snippet:**
-```python
-def process_pdf_file(file_data: bytes):
-    pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_data))
-    text_content = ""
-    
-    for page in pdf_reader.pages:
-        text_content += page.extract_text() + "\n"
-    
-    # Process extracted text
-    if text_content.strip():
-        # Check healthcare relevance
-        # Identify document type
-        # Generate summary
-        return summary, context, True, doc_type
+### 3.1 File Processing & Summary
+
+**Key Features:**
+- Extracts text from PDFs and analyzes images using AI
+- Uses OCR (Optical Character Recognition) for scanned PDFs when text extraction fails
+- Automatically checks if file is healthcare-related
+- Validates patient name matches database records
+- Validates if uploaded file matches requested report type (e.g., "blood report", "CT scan")
+- Generates comprehensive summaries with all medical parameters
+
+**Flow:**
+```mermaid
+flowchart TD
+    A[File Upload] --> B[Extract Content]
+    B --> C[Healthcare Check]
+    C --> D[Name Verification]
+    D --> E[Report Type Check]
+    E --> F[Generate Summary]
+    F --> G[Save to Database]
 ```
 
-**How It Works:**
-1. PDF file is uploaded
-2. PyPDF2 extracts text directly from PDF structure
-3. Extracted text is analyzed for healthcare relevance
-4. Document type is identified (prescription, lab report, etc.)
-5. AI generates a type-specific summary
-6. Summary and context are saved to database
+### 3.2 Prescription Validation with Allergy Checking
 
-**Use Case:** PDFs with selectable text (digital documents, forms, reports)
+**Key Features:**
+- Automatically triggered when prescription files are uploaded
+- Checks if products require prescription (rx_required flag)
+- Searches prescription text for product names
+- Determines if user can take the product based on prescription presence
+- Automatically analyzes prescription for allergy conflicts with patient's known allergies
+- Detects medication interactions with current medications
 
----
-
-## Type 2: Scanned PDF Processing
-
-**Method:** OCR (Optical Character Recognition) using pytesseract
-
-**Code Snippet:**
-```python
-def process_scanned_pdf_with_ocr(pdf_reader, file_data: bytes):
-    # Convert PDF pages to images
-    images = convert_from_bytes(file_data, dpi=300)
-    
-    # Extract text using OCR
-    ocr_text = ""
-    for image in images:
-        page_text = pytesseract.image_to_string(image, lang='eng')
-        ocr_text += page_text + "\n"
-    
-    # Process OCR text same as regular PDF
-    return summary, context, True, doc_type
+**Flow:**
+```mermaid
+flowchart TD
+    A[Product List] --> B[Check Prescription]
+    B --> C[Extract Medications]
+    C --> D[Check Allergies]
+    D --> E[Check Interactions]
+    E --> F[Return Validation]
 ```
 
-**How It Works:**
-1. PDF file is uploaded
-2. PyPDF2 attempts text extraction (returns empty)
-3. System detects empty extraction → triggers OCR
-4. PDF pages are converted to images (300 DPI)
-5. pytesseract performs OCR on each page image
-6. Extracted OCR text follows same processing as regular PDFs
-
-**Use Case:** Scanned documents, photographed documents saved as PDF
-
 ---
 
-## Type 3: Image File Processing
+## 4. Personalized Recommendations
 
-**Method:** OpenAI Vision API for image analysis
+**Purpose:** Recommend services and products based on patient data. When skin profile values are provided, returns skin-specific product recommendations. Otherwise, provides general personalized recommendations based on profile, history, and documents.
 
-**Code Snippet:**
-```python
-def process_image_file(file_data: bytes):
-    # Convert image to base64
-    base64_image = base64.b64encode(file_data).decode('utf-8')
-    
-    # Analyze with OpenAI Vision
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Analyze image..."},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-            ]
-        }]
-    )
-    
-    # Extract description and healthcare relevance
-    return description, description, is_healthcare_related
+### 4.1 Skin Product Recommendations
+
+**Key Features:**
+- Triggered when skin profile values (skinValues) are provided
+- Accepts freeform text describing skin concerns, constraints, and AI-generated scores
+- Queries skin_profiles database to find matching product recommendations
+- Returns personalized product suggestions with usage instructions
+- Matches based on skin type, acne severity, pore score, pigmentation, hydration, and other factors
+
+**Flow:**
+```mermaid
+flowchart LR
+    A[Skin Profile Text] --> B[Parse Parameters]
+    B --> C[Query Database]
+    C --> D[Match Products]
+    D --> E[Return Recommendations]
 ```
 
-**How It Works:**
-1. Image file is uploaded (JPG, PNG, etc.)
-2. Image is converted to base64 format
-3. OpenAI Vision API analyzes the image
-4. AI provides description and determines healthcare relevance
-5. Description serves as both summary and context
-6. Results are saved to database
+### 4.2 General Service & Product Recommendations
 
-**Use Case:** Photos of prescriptions, lab reports, medical documents, skin conditions, before/after photos
+**Key Features:**
+- Triggered when recommendations flag is set without skinValues
+- Analyzes patient demographics (gender, age) to filter appropriate services
+- Reviews past bookings and consultation summaries
+- Considers uploaded medical reports and treatment history
+- Recommends complementary services and maintenance treatments
+- Suggests products that support past treatments and address medical conditions
 
----
-
-## Common Processing Steps
-
-All three types follow these common steps after extraction:
-
-1. **Healthcare Relevance Check**
-   - Analyzes content to determine if it's medical/healthcare related
-   - Non-healthcare files are skipped
-
-2. **Document Type Identification** (PDFs only)
-   - Classifies as: prescription, lab_report, medical_history, diagnosis, or general
-
-3. **AI Summary Generation**
-   - Creates type-specific summaries
-   - Extracts key information (medications, test results, concerns, etc.)
-
-4. **Database Storage**
-   - Saves summary, context, embeddings for search
-   - Links to user_id and session_id
+**Flow:**
+```mermaid
+flowchart TD
+    A[User ID] --> B[Get Profile]
+    B --> C[Get Booking History]
+    C --> D[Get File Summaries]
+    D --> E[Analyze Data]
+    E --> F[Recommend Services]
+    E --> G[Recommend Products]
+    F --> H[Return Results]
+    G --> H
+```
 
 ---
 
-## Key Features
+## 5. Treatment Planner (Plan A/B/C)
 
-- **Automatic Detection:** System automatically detects file type and processing method
-- **Fallback Mechanism:** PDFs without text automatically use OCR
-- **Healthcare Filtering:** Only healthcare-related content is processed
-- **Type-Specific Summaries:** Different summary formats for prescriptions, lab reports, etc.
-- **Searchable:** All processed files are indexed with embeddings for semantic search
+**Purpose:** Convert doctor's treatment notes into structured treatment plans (Plan A, B, C) with complete database verification.
+
+**Key Features:**
+- Parses doctor's notes to extract services, products, and lab tests
+- Verifies all items against database (services, products, lab tests)
+- Structures into three plans: Plan A (primary treatment), Plan B (alternative), Plan C (medications/products)
+- Includes complete cost information and service specifications
+- Returns verified IDs for all services, products, and lab tests
+
+**Flow:**
+```mermaid
+flowchart TD
+    A[Doctor Notes] --> B[Parse Content]
+    B --> C[Verify Services]
+    B --> D[Verify Products]
+    B --> E[Verify Lab Tests]
+    C --> F[Structure Plans]
+    D --> F
+    E --> F
+    F --> G[Plan A/B/C]
+    G --> H[Return JSON]
+```
 
 ---
 
-## File Type Support
+## 6. Chat Summary Generation
 
-| File Type | Extraction Method | Output |
-|-----------|------------------|--------|
-| Regular PDF | PyPDF2 text extraction | Text content |
-| Scanned PDF | pytesseract OCR | OCR text |
-| Images (JPG/PNG) | OpenAI Vision API | Image description |
+**Purpose:** Generate comprehensive summary of complete chat session for long-term memory storage.
+
+**Key Features:**
+- Automatically detects summary requests through keywords (e.g., "make a summary", "summarize chat")
+- Reviews complete conversation history from the session
+- Creates structured summary with title, topics discussed, key information, and next steps
+- Stores summary in database for future context retrieval
+- Enables long-term memory across multiple sessions
+
+**Flow:**
+```mermaid
+flowchart LR
+    A[Summary Request] --> B[Load Chat History]
+    B --> C[Analyze Conversation]
+    C --> D[Generate Summary]
+    D --> E[Save to Database]
+```
+
+---
+
+## 7. Follow-Up Chat (Post-Consultation)
+
+**Purpose:** Conduct interactive follow-up assessment after consultation to track patient progress and recovery.
+
+**Key Features:**
+- Asks follow-up questions about treatment progress and recovery
+- References previous consultation details and treatment plan
+- Gathers information about side effects, results, and patient satisfaction
+- Tracks progress over time with follow-up dates
+- Generates follow-up summary for doctor review
+
+**Flow:**
+```mermaid
+flowchart TD
+    A[Follow-Up Request] --> B[Load Consultation Data]
+    B --> C[Ask Progress Questions]
+    C --> D[User Response]
+    D --> E{More Questions?}
+    E -->|Yes| C
+    E -->|No| F[Generate Summary]
+    F --> G[Save Follow-Up]
+```
 
 ---
 
