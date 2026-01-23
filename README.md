@@ -1,385 +1,610 @@
-# Troubleshooting Journey - Solving Intermittent PDF Failures
+# Complete Playwright PDF Generation Guide with SSL
 
 ## Table of Contents
 
-1. [The Problem](#the-problem)
-2. [Initial Investigation](#initial-investigation)
-3. [Failed Attempts](#failed-attempts)
-4. [Root Cause Analysis](#root-cause-analysis)
-5. [The Solution](#the-solution)
-6. [Verification and Testing](#verification-and-testing)
-7. [Lessons Learned](#lessons-learned)
+1. [Introduction](#introduction)
+2. [Understanding Playwright Architecture](#understanding-playwright-architecture)
+3. [SSL Certificate Management](#ssl-certificate-management)
+4. [Docker Environment Setup](#docker-environment-setup)
+5. [Python Implementation](#python-implementation)
+6. [Security Best Practices](#security-best-practices)
+7. [Production Deployment](#production-deployment)
 
 ---
 
-## The Problem
 
-### Initial Symptoms
+## Introduction
 
-**Date**: January 22, 2026
-**Environment**: Docker container running Playwright PDF service
-**Issue**: Intermittent image loading failures
+### What is Playwright?
 
-### Observable Behavior
+Playwright is a browser automation framework developed by Microsoft that allows you to control Chromium, Firefox, and WebKit browsers programmatically. Unlike traditional PDF generation libraries, Playwright uses a real browser engine, which means:
 
-Request 1 (Project: b3a8e75b-456c-4ada-9145-13e456f62ad9):
-✅ All 43 images loaded successfully
-✅ PDF generated: 46,613,860 bytes
-✅ Status: SUCCESS
+Perfect rendering: Exactly what users see in their browser
 
-Request 2 (Project: 13d639asdas-2ghfhgfhgfhfhfhgf916-41b4-a7f4-ebc92c34a1cb):
-❌ All 40 images failed with net::ERR_ABORTED
-❌ PDF generated: 2,333,242 bytes (missing images)
-❌ Status: PARTIAL FAILURE
+Full CSS support: Including modern features like Grid, Flexbox, animations
 
-Request 3 (Project: b3a8e75b-456c-4ada-9145-13e456f62ad9):
-✅ All 43 images loaded successfully
-✅ Status: SUCCESS
+JavaScript execution: Dynamic content renders correctly
 
-Request 4 (Project: 13d639asdas-2ghfhgfhgfhfhfhgf916-41b4-a7f4-ebc92c34a1cb):
-❌ All 40 images failed
-❌ Status: PARTIAL FAILURE
+Font rendering: System fonts and web fonts work seamlessly
 
-### Pattern Recognition
 
-**Key observation**: The SAME project IDs consistently failed/succeeded
-- Not random failures
-- Pattern repeats predictably
-- Failure tied to specific projects, not service state
+### Why Playwright for PDF Generation?
 
-### Error Messages
+Traditional PDF libraries (like WeasyPrint, ReportLab) have limitations:
 
-❌ [IMG REQUEST FAILED] net::ERR_ABORTED: https://nm1ecs.yotta.com:9021/previsualization/text-image/image_acb698d3-306a-4f...
+❌ Poor CSS support (especially modern CSS)
 
-[DEBUG] Resource type: image
-[DEBUG] Method: GET
-[DEBUG] ⚠️ YOTTA URL FAILED - SSL certificate issue likely
+❌ No JavaScript execution
 
-**Critical clue**: `net::ERR_ABORTED` suggests network/security rejection
+❌ Font rendering issues
 
----
+❌ Layout inconsistencies
 
-## Initial Investigation
+Playwright solves these by using Chrome's native PDF engine:
 
-### Step 1: Verify Certificate Installation
+✅ 100% accurate rendering
 
-**Hypothesis**: Certificate not installed properly
+✅ Full modern web standards support
 
-**Test**:
+✅ Print-quality output
 
-```bash
-# Check system certificate store
-docker exec -it pdf-service bash
-ls -la /usr/local/share/ca-certificates/
+✅ Production-ready stability
 
-# Output: yotta-ca.crt present ✅
 
-# Check if certificate was added to bundle
-cat /etc/ssl/certs/ca-certificates.crt | grep -A5 "Yotta"
 
-# Output: Certificate present ✅
+## Understanding Playwright Architecture
 
-# Verify Python can see it
-python3 -c "import ssl; print(ssl.get_default_verify_paths())"
+### How Playwright Works Internally
 
-# Output: Points to /etc/ssl/certs/ca-certificates.crt ✅
+```
+                     Your Python Application
+
+  ┌──────────────────────────────────────────────────────┐
+  │         Playwright Python Library                     │
+  │  (playwright.async_api.async_playwright)             │
+  └────────────────┬─────────────────────────────────────┘
+
+                   │ WebSocket Communication
+
+  ┌────────────────▼─────────────────────────────────────┐
+  │      Playwright Server (Node.js Process)             │
+  │  - Manages browser lifecycle                         │
+  │  - Handles protocol translation                      │
+  │  - Coordinates multiple browser instances            │
+  └────────────────┬─────────────────────────────────────┘
+└───────────────────┼──────────────────────────────────────────┘
+                    │
+                    │ Chrome DevTools Protocol (CDP)
+                    │
+    ┌───────────────▼─────────────────┐
+    │   Chrome Browser Process        │
+    │                                  │
+    │  ┌────────────────────────────┐ │
+    │  │   Rendering Engine         │ │
+    │  │   - Blink (HTML/CSS)      │ │
+    │  │   - V8 (JavaScript)       │ │
+    │  │   - Skia (Graphics)       │ │
+    │  └────────────────────────────┘ │
+    │                                  │
+    │  ┌────────────────────────────┐ │
+    │  │   Network Stack            │ │
+    │  │   - HTTPS/TLS Handling    │ │
+    │  │   - Certificate Validation│ │
+    │  └────────────────────────────┘ │
+    │                                  │
+    │  ┌────────────────────────────┐ │
+    │  │   PDF Generation Engine    │ │
+    │  │   - Skia PDF Backend      │ │
+    │  │   - Print Layout          │ │
+    │  └────────────────────────────┘ │
+    └──────────────────────────────────┘
 ```
 
-**Result**: System certificates installed correctly ✅
-**Conclusion**: Not a system-level certificate issue
+### Key Components Explained
 
-### Step 2: Check Chrome NSS Database
-
-**Test**:
-
-```bash
-# List certificates in Chrome's database
-certutil -d sql:/root/.pki/nssdb -L
-
-# Expected output:
-# Certificate Nickname         Trust Attributes
-# Yotta CA                     C,,
-
-# Actual output:
-# Certificate Nickname         Trust Attributes
-# Yotta CA                     C,,
-```
-
-**Result**: Chrome NSS database has certificate ✅
-**Conclusion**: Chrome should trust Yotta CA
-
-### Step 3: Test Direct HTTPS Connection
-
-**Hypothesis**: Maybe Yotta server itself has issues
-
-**Test**:
-
-```bash
-# Test with curl (uses system certificates)
-curl -v https://nm1ecs.yotta.com:9021/previsualization/test.png
-
-# Output:
-# * SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384
-# * Server certificate:
-# *  subject: CN=nm1ecs.yotta.com
-# *  issuer: CN=Yotta CA
-# * SSL certificate verify ok. ✅
-```
-
-**Result**: Server certificate valid, system trusts it ✅
-**Conclusion**: Server is fine, issue is Chrome-specific
-
-### Step 4: Analyze Timing Pattern
-
-**Question**: Why does it work sometimes but not others?
-
-**Log analysis**:
-Request 1 @ 06:19:21 UTC - SUCCESS
-Request 2 @ 06:19:23 UTC - FAILURE  (2 seconds later)
-Request 3 @ 06:19:25 UTC - SUCCESS  (2 seconds later)
-Request 4 @ 06:19:27 UTC - FAILURE  (2 seconds later)
-
-**Pattern**: Failures occur on EVERY request for certain projects
-**Question**: What's different about the failing projects?
-
-### Step 5: Compare HTML Content
-
-**Test**: Compare HTML between working and failing projects
+1. Playwright Python Library
 
 ```python
-# Working project HTML
-<img src="https://nm1ecs.yotta.com:9021/.../image_20cb7004.png?X-Amz-Date=20260122T061921Z...">
+from playwright.async_api import async_playwright
 
-# Failing project HTML
-<img src="https://nm1ecs.yotta.com:9021/.../image_acb698d3.png?X-Amz-Date=20260122T061921Z...">
+async with async_playwright() as p:
+    # p is the Playwright instance
+    # Manages connection to Playwright server
 ```
 
-**Finding**: Both use identical Yotta URLs with presigned parameters
-**Conclusion**: Not an HTML/URL structure issue
+What happens internally:
 
----
+Spawns a Node.js process running Playwright server
+Establishes WebSocket connection for communication
+Provides Python API that translates to browser commands
 
-## Failed Attempts
 
-### Attempt 1: Increase SSL Bypass Flags
-
-**Approach**: Add every SSL bypass flag possible
-
-```python
-args=[
-    "--ignore-certificate-errors",
-    "--ignore-ssl-errors",
-    "--ignore-certificate-errors-spki-list",
-    "--disable-web-security",
-    "--allow-insecure-localhost",
-    "--allow-running-insecure-content",
-    "--reduce-security-for-testing",
-    "--disable-features=CertificateTransparencyEnforcement",
-]
-```
-
-**Result**: ❌ Still intermittent failures
-**Why it failed**: We're bypassing validation, not fixing the root cause
-
-### Attempt 2: Use `launch_persistent_context()`
-
-**Approach**: Use persistent context with custom user data directory
-
-```python
-context = await p.chromium.launch_persistent_context(
-    user_data_dir="/tmp/chrome_profile",
-    ignore_https_errors=True,
-)
-```
-
-**Result**: ❌ First request succeeds, second request fails
-**Error**: SSL validation fails on subsequent requests
-**GitHub Issues Found**:
-- playwright#32801: "launch_persistent_context ignores SSL flags after first use"
-- playwright#2131: "ignore_https_errors inconsistent with persistent context"
-
-**Why it failed**: Known Playwright bug with persistent contexts
-
-### Attempt 3: Create Fresh User Data Directory Per Request
-
-**Approach**: Generate unique temp directory for each request
-
-```python
-temp_user_data_dir = tempfile.mkdtemp(prefix="chrome_profile_")
-
-browser = await p.chromium.launch(
-    args=[
-        f"--user-data-dir={temp_user_data_dir}",
-    ]
-)
-
-# Cleanup
-shutil.rmtree(temp_user_data_dir, ignore_errors=True)
-```
-
-**Result**: ❌ ERROR
-playwright._impl._errors.Error: Pass user_data_dir parameter to
-'browser_type.launch_persistent_context(user_data_dir, **kwargs)'
-instead of specifying '--user-data-dir' argument
-
-**Why it failed**: Playwright blocks `--user-data-dir` in launch args
-
-### Attempt 4: Set ignore_https_errors at Multiple Levels
-
-**Approach**: Set SSL bypass at every possible level
-
-```python
-# At launch
-browser = await p.chromium.launch(args=["--ignore-certificate-errors"])
-
-# At context
-context = await browser.new_context(ignore_https_errors=True)
-
-# At page
-page = await context.new_page()
-```
-
-**Result**: ❌ Still intermittent failures
-**Why it failed**: Bypassing symptoms, not fixing cause
-
-### Attempt 5: Add Delays Between Requests
-
-**Approach**: Wait for Chrome to "settle" between requests
-
-```python
-await browser.close()
-await asyncio.sleep(5)  # Wait 5 seconds
-```
-
-**Result**: ❌ Still fails on same projects
-**Why it failed**: Not a timing issue, state persists somewhere
-
----
-
-## Root Cause Analysis
-
-### Breakthrough: Process State Persistence
-
-**Key Realization**: Chrome was reusing processes between requests
-
-**Evidence**:
-
-```bash
-# During testing, checked Chrome processes
-ps aux | grep chrome
-
-# Output showed:
-# /usr/bin/google-chrome --type=renderer ... PID 1234
-# Same PID across multiple requests! ❌
-```
-
-**What this meant**:
-1. Request 1 launches Chrome → PID 1234
-2. Chrome validates certificates → caches result
-3. Browser closes BUT process 1234 stays alive
-4. Request 2 launches "new" Chrome → reuses PID 1234
-5. Chrome uses cached validation state → wrong result
-
-### The Certificate Validation Cache
-
-Chrome caches SSL validation results per process:
-
-Process 1234 Certificate Cache:
-├─> https://nm1ecs.yotta.com:9021
-│   └─> First validation: ✅ TRUSTED (worked)
-│       └─> Cached for process lifetime
-│
-└─> On next request (same process):
-└─> Looks up cache
-└─> May return stale result ❌
-
-### Why Some Projects Always Failed
-
-**Theory**: Different HTML → Different first-load behavior → Different cache state
-
-**Project A (always worked)**:
-1. First load: Certificate validated AFTER Chrome fully initialized
-2. Validation succeeded → cached as "TRUSTED"
-3. Subsequent requests: Cache hit → ✅ works
-
-**Project B (always failed)**:
-1. First load: Certificate validated BEFORE Chrome fully initialized
-2. Validation failed → cached as "UNTRUSTED"
-3. Subsequent requests: Cache hit → ❌ fails
-
-### The Real Issue: No Process Isolation
-
-```python
-# What we had:
-browser = await p.chromium.launch(args=[...])
-
-# Chrome's default behavior:
-# - Launches main browser process
-# - Spawns renderer processes
-# - REUSES renderer processes between launches
-# - Process pool for efficiency
-```
-
-**Problem**: Process reuse means state leakage
-
----
-
-## The Solution
-
-### Discovery: `--single-process` Flag
-
-**Research**: Found in Chromium documentation:
-> `--single-process`: Runs the renderer and plugins in the same process as the browser
-
-**Why this helps**:
-- Forces Chrome to use ONE process per browser instance
-- When browser closes, process dies completely
-- Next launch = completely fresh process
-- No state carries over
-
-### Implementation
+2. Browser Launch Process
 
 ```python
 browser = await p.chromium.launch(
     channel="chrome",
     headless=True,
+    args=[...]
+)
+```
+
+What happens internally:
+
+Playwright locates Chrome binary on system
+Launches Chrome with specified command-line arguments
+Connects via Chrome DevTools Protocol (CDP)
+Returns browser handle for control
+
+
+3. Browser Context
+
+```python
+context = await browser.new_context(
+    viewport={"width": 1920, "height": 1080},
+    ignore_https_errors=False
+)
+```
+
+What is a Context?
+
+Isolated browser session (like Incognito mode)
+Has its own cookies, cache, local storage
+Multiple contexts = multiple isolated sessions in one browser
+
+Why use contexts instead of multiple browsers?
+
+Performance: Contexts share browser process
+Resource efficiency: Less memory per context
+Isolation: Each context is completely independent
+
+
+4. Page Object
+
+```python
+page = await context.new_page()
+```
+
+**What is a Page?**
+- Represents a single browser tab
+- Can load HTML, execute JavaScript, capture screenshots
+- Provides full control over the page lifecycle
+
+---
+
+## SSL Certificate Management
+
+### Understanding SSL/TLS in Browsers
+
+When Chrome loads `https://example.com`:
+
+```
+1. TCP Connection
+   └─> Client: "Hello, let's use TLS"
+
+2. TLS Handshake
+   └─> Server: "Here's my certificate"
+
+3. Certificate Validation
+   ├─> Check: Is certificate signed by trusted CA?
+   ├─> Check: Is domain name correct?
+   ├─> Check: Is certificate expired?
+   └─> Check: Is certificate revoked?
+
+4. If Valid:
+   └─> Encrypted communication established
+
+5. If Invalid:
+   └─> net::ERR_CERT_AUTHORITY_INVALID
+```
+
+### The Custom CA Challenge
+
+**Scenario**: Your company uses internal S3 (Yotta) with custom CA certificate
+
+**Problem**: Chrome doesn't trust custom CAs by default
+
+```
+Browser tries to load: https://nm1ecs.yotta.com:9021/image.png
+
+Chrome checks certificate:
+├─> Issued by: "Yotta CA"
+├─> Chrome's trust store: ❌ "Yotta CA" not found
+└─> Result: net::ERR_CERT_AUTHORITY_INVALID
+```
+
+Solution: Multi-Layer Certificate Trust
+
+We need to install the certificate in THREE places because Chrome checks multiple certificate stores:
+
+Layer 1: System Certificate Store
+
+```dockerfile
+# Copy custom CA certificate
+COPY yotta-ca.pem /usr/local/share/ca-certificates/yotta-ca.crt
+
+# Add to system trust store
+RUN update-ca-certificates
+```
+
+What this does:
+
+Copies certificate to /usr/local/share/ca-certificates/
+update-ca-certificates reads all .crt files
+Adds them to /etc/ssl/certs/ca-certificates.crt
+Python libraries (boto3, requests) now trust this CA
+
+Verification:
+
+```bash
+# Check if certificate was added
+ls -la /etc/ssl/certs/ | grep yotta
+
+# Verify system trust
+openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt yotta-server.crt
+```
+
+Layer 2: Chrome NSS Database
+
+Chrome uses Network Security Services (NSS) for certificate management:
+
+```dockerfile
+# Create Chrome's certificate database
+RUN mkdir -p /root/.pki/nssdb && \
+    certutil -d sql:/root/.pki/nssdb -N --empty-password && \
+    certutil -d sql:/root/.pki/nssdb -A -t "C,," -n "Yotta CA" -i /usr/local/share/ca-certificates/yotta-ca.crt
+```
+
+Breaking down the command:
+
+```bash
+# Create NSS database directory
+mkdir -p /root/.pki/nssdb
+
+# Initialize new NSS database
+certutil -d sql:/root/.pki/nssdb -N --empty-password
+# -d: database path (sql: prefix for SQLite format)
+# -N: create new database
+# --empty-password: no password protection
+
+# Add certificate to database
+certutil -d sql:/root/.pki/nssdb -A -t "C,," -n "Yotta CA" -i yotta-ca.crt
+# -A: add certificate
+# -t "C,,": trust flags (C = trusted CA)
+# -n: nickname for certificate
+# -i: input file
+```
+
+Trust flags explained:
+
+C,, = Trust for SSL/TLS certificates
+First position: SSL trust
+Second position: Email trust
+Third position: Object signing trust
+
+Why Chrome needs this:
+
+Chrome doesn't use system certificate store on Linux. It maintains its own database in ~/.pki/nssdb.
+
+Verification:
+
+```bash
+# List certificates in NSS database
+certutil -d sql:/root/.pki/nssdb -L
+
+# Should show:
+# Certificate Nickname         Trust Attributes
+# Yotta CA                     C,,
+```
+
+Layer 3: Environment Variables
+
+```python
+os.environ['SSL_CERT_FILE'] = '/etc/ssl/certs/ca-certificates.crt'
+os.environ['SSL_CERT_DIR'] = '/etc/ssl/certs'
+os.environ['REQUESTS_CA_BUNDLE'] = '/etc/ssl/certs/ca-certificates.crt'
+os.environ['AWS_CA_BUNDLE'] = '/etc/ssl/certs/ca-certificates.crt'
+```
+
+**What each variable does:**
+
+| Variable | Used By | Purpose |
+|----------|---------|---------|
+| `SSL_CERT_FILE` | Python SSL module | Points to CA bundle file |
+| `SSL_CERT_DIR` | Python SSL module | Directory containing CA certs |
+| `REQUESTS_CA_BUNDLE` | requests library | CA bundle for HTTP requests |
+| `AWS_CA_BUNDLE` | boto3/botocore | CA bundle for AWS S3 uploads |
+
+**Why needed:**
+- Python libraries don't automatically find custom CAs
+- These variables tell Python where to look for certificates
+- Critical for S3 uploads to work with custom CA
+
+### Certificate Installation Flow
+
+```
+Docker Build Time:
+├─> COPY yotta-ca.pem → /usr/local/share/ca-certificates/
+├─> RUN update-ca-certificates → adds to system trust
+├─> RUN certutil → adds to Chrome NSS database
+└─> ENV HOME=/root → Chrome will find NSS database
+
+Container Runtime:
+├─> Python starts
+├─> Sets environment variables (SSL_CERT_FILE, etc.)
+├─> boto3 reads AWS_CA_BUNDLE → trusts Yotta for S3
+├─> Playwright launches Chrome
+├─> Chrome reads /root/.pki/nssdb → trusts Yotta
+└─> HTTPS requests succeed ✅
+```
+
+## Docker Environment Setup
+
+### Complete Dockerfile Explained
+
+```dockerfile
+# Use Python 3.11 slim as base image
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# ============================================================
+# SECTION 1: Install System Dependencies
+# ============================================================
+RUN apt-get update && apt-get install -y \
+    # Core utilities
+    wget \
+    gnupg \
+    curl \
+    ca-certificates \
+    # Font support for PDF rendering
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    # Chrome dependencies (sound)
+    libasound2 \
+    # Chrome dependencies (accessibility)
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    # Chrome dependencies (printing)
+    libcups2 \
+    # Chrome dependencies (system integration)
+    libdbus-1-3 \
+    # Chrome dependencies (graphics)
+    libdrm2 \
+    libgbm1 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    # Chrome dependencies (security)
+    libnspr4 \
+    libnss3 \
+    libnss3-tools \
+    # Chrome dependencies (display)
+    libwayland-client0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    libx11-6 \
+    libxcb1 \
+    libxext6 \
+    xdg-utils \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/*
+```
+
+Why each dependency is needed:
+
+PackagePurposeWhat breaks without itlibnss3Certificate handlingSSL verification failslibnss3-toolscertutil commandCan't add custom CAlibgtk-3-0UI toolkitChrome can't renderlibgbm1Graphics bufferHeadless rendering failsfonts-liberationStandard fontsText appears as boxeslibcups2Printing supportPDF generation fails
+
+```dockerfile
+# ============================================================
+# SECTION 2: Install Custom SSL Certificate
+# ============================================================
+COPY yotta-ca.pem /usr/local/share/ca-certificates/yotta-ca.crt
+RUN update-ca-certificates
+```
+
+Certificate format matters:
+
+File MUST have .crt extension (not .pem)
+Must be in /usr/local/share/ca-certificates/
+Must be PEM format (base64 encoded)
+
+```dockerfile
+# ============================================================
+# SECTION 3: Install Google Chrome
+# ============================================================
+RUN wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get update \
+    && apt-get install -y /tmp/google-chrome.deb \
+    && rm /tmp/google-chrome.deb \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+Why not use Playwright's bundled Chromium?
+
+System Chrome is pre-installed (no playwright install)
+Better compatibility with system libraries
+Easier to update (via apt)
+Chrome is optimized for production
+
+```dockerfile
+# ============================================================
+# SECTION 4: Python Dependencies
+# ============================================================
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+```
+
+**Key dependencies:**
+
+```
+playwright==1.40.0
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+boto3==1.29.7
+python-dotenv==1.0.0
+```
+
+```dockerfile
+# ============================================================
+# SECTION 5: Application Code
+# ============================================================
+COPY . .
+```
+
+```dockerfile
+# ============================================================
+# SECTION 6: Environment Configuration
+# ============================================================
+ENV PYTHONUNBUFFERED=1
+ENV CHROME_BIN=/usr/bin/google-chrome
+```
+
+What these do:
+
+PYTHONUNBUFFERED=1: Print logs immediately (no buffering)
+CHROME_BIN: Tells Playwright where Chrome is located
+
+```dockerfile
+# ============================================================
+# SECTION 7: Chrome NSS Database Setup
+# ============================================================
+RUN mkdir -p /root/.pki/nssdb && \
+    certutil -d sql:/root/.pki/nssdb -N --empty-password && \
+    certutil -d sql:/root/.pki/nssdb -A -t "C,," -n "Yotta CA" -i /usr/local/share/ca-certificates/yotta-ca.crt && \
+    chmod -R 755 /root/.pki
+
+ENV HOME=/root
+```
+
+Critical: ENV HOME=/root ensures Chrome looks in /root/.pki/nssdb for certificates.
+
+```dockerfile
+# ============================================================
+# SECTION 8: Service Configuration
+# ============================================================
+EXPOSE 8004
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8004/health || exit 1
+
+CMD ["uvicorn", "pdf_service:app", "--host", "0.0.0.0", "--port", "8004"]
+```
+
+Health check explained:
+
+--interval=30s: Check every 30 seconds
+--timeout=10s: Wait 10 seconds for response
+--start-period=40s: Wait 40 seconds before first check
+--retries=3: Mark unhealthy after 3 failures
+
+
+
+## Python Implementation
+
+### Complete Code Structure
+
+```python
+from playwright.async_api import async_playwright
+import asyncio
+
+class PDFConverter:
+    async def convert_to_pdf(
+        self, 
+        html_content: str, 
+        output_path: str, 
+        options: Dict[str, Any]
+    ) -> bytes:
+        """
+        Convert HTML to PDF using Playwright with proper SSL validation.
+        
+        Architecture:
+        1. Launch Chrome with minimal flags
+        2. Create isolated context with SSL validation
+        3. Load HTML content
+        4. Wait for resources (images, fonts)
+        5. Generate PDF bytes
+        6. Cleanup resources
+        
+        Returns:
+            PDF as bytes (ready for S3 upload or download)
+        """
+```
+
+Step-by-Step Implementation
+
+Step 1: Initialize Playwright
+
+```python
+browser = None
+context = None
+page = None
+
+try:
+    async with async_playwright() as p:
+        # Playwright instance created
+        # Manages browser lifecycle
+```
+
+What happens here:
+
+Spawns a Node.js process running Playwright server
+Establishes WebSocket connection for communication
+p object is your control interface
+
+Step 2: Launch Browser
+
+```python
+browser = await p.chromium.launch(
+    channel="chrome",  # Use system Chrome (not Chromium)
+    headless=True,     # No GUI (server mode)
     args=[
-        # Essential Docker flags
+        # Docker requirements
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
+        
+        # Performance
         "--disable-gpu",
-        
-        # THE FIX:
-        "--single-process",  # ✅ Complete process isolation
-        
-        # Minimal additional flags
         "--disable-background-networking",
         "--disable-sync",
         "--disable-translate",
         "--disable-extensions",
-        "--disable-default-apps",
-        "--no-first-run",
-        "--no-default-browser-check",
+        
+        # Process isolation (CRITICAL)
+        "--single-process",
+        
+        # Tracking
+        f"--user-agent=PDFService-{uuid.uuid4()}",
     ]
 )
 ```
 
-### Why It Works
+**Flag breakdown:**
 
-WITHOUT --single-process:
+| Flag | Why Needed | What Breaks Without It |
+|------|-----------|----------------------|
+| `--no-sandbox` | Docker requires root | Chrome won't start |
+| `--disable-setuid-sandbox` | No SUID in containers | Security error |
+| `--disable-dev-shm-usage` | Limited `/dev/shm` | Memory allocation fails |
+| `--disable-gpu` | No GPU in headless | Uses CPU rendering |
+| `--single-process` | Process isolation | State leaks between requests |
+
+**Why `--single-process` is critical:**
 
 ```
+Without --single-process:
 Request 1: Browser process #1234
            └─> Caches certificate validation
 Request 2: Reuses process #1234
            └─> Uses cached state (may be invalid)
            └─> Intermittent failures ❌
-```
 
-WITH --single-process:
-
-```
+With --single-process:
 Request 1: Fresh process #1234
            └─> Validates certificates fresh
 Request 2: Fresh process #5678
@@ -387,405 +612,512 @@ Request 2: Fresh process #5678
            └─> Consistent behavior ✅
 ```
 
-### Additional SSL Configuration
-
-Once process isolation was fixed, proper SSL configuration worked:
+Step 3: Create Browser Context
 
 ```python
-# 1. System certificates
-os.environ['SSL_CERT_FILE'] = '/etc/ssl/certs/ca-certificates.crt'
-
-# 2. Chrome NSS database (in Dockerfile)
-RUN certutil -d sql:/root/.pki/nssdb -A -t "C,," -n "Yotta CA" ...
-
-# 3. Context-level validation
 context = await browser.new_context(
-    ignore_https_errors=False  # ✅ Validate properly
+    viewport={"width": 1920, "height": 1080},
+    bypass_csp=True,
+    ignore_https_errors=False,  # ✅ Validate certificates
+    java_script_enabled=True,
+    accept_downloads=False,
 )
 ```
 
-**Key**: With `--single-process`, Chrome consistently reads certificates from NSS database
-
----
-
-## Verification and Testing
-
-### Test 1: Rapid Sequential Requests
-
-```bash
-# Test script
-for i in {1..10}; do
-  curl -X POST http://localhost:8004/pdf-service/generate \
-    -H "Content-Type: application/json" \
-    -d @project_b_failing.json
-  echo "Request $i completed"
-done
-```
-
-**Before fix**:
-Request 1: ✅ SUCCESS (43/43 images)
-Request 2: ❌ FAILURE (0/40 images)
-Request 3: ✅ SUCCESS (43/43 images)
-Request 4: ❌ FAILURE (0/40 images)
-...
-
-**After fix**:
-Request 1: ✅ SUCCESS (43/43 images)
-Request 2: ✅ SUCCESS (40/40 images)
-Request 3: ✅ SUCCESS (43/43 images)
-Request 4: ✅ SUCCESS (40/40 images)
-...
-Request 10: ✅ SUCCESS (40/40 images)
-
-### Test 2: Concurrent Requests
+Context options explained:
 
 ```python
-import asyncio
-import httpx
+viewport={"width": 1920, "height": 1080}
+# Sets virtual screen size for rendering
+# Affects: @media queries, responsive layouts
+# PDF will render as if viewed on 1920x1080 screen
 
-async def generate_pdf(project_id):
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "http://localhost:8004/pdf-service/generate",
-            json={...}
-        )
-        return response.status_code
+bypass_csp=True
+# Bypasses Content Security Policy
+# Why: HTML content might have restrictive CSP
+# Safe because: We control the HTML content
 
-async def main():
-    # Launch 20 concurrent requests
-    tasks = [generate_pdf(f"project_{i}") for i in range(20)]
-    results = await asyncio.gather(*tasks)
+ignore_https_errors=False  # ⚠️ MOST IMPORTANT
+# False = Validate all SSL certificates (secure)
+# True = Skip validation (insecure, never use in production)
+# Our setup: False works because we installed CA properly
+
+java_script_enabled=True
+# Allows JavaScript execution
+# Why: Dynamic content, charts, animations
+
+accept_downloads=False
+# Prevents file downloads during rendering
+# Why: We only want PDF output, no side effects
+```
+
+Step 4: Create Page and Load Content
+
+```python
+page = await context.new_page()
+
+# Set media type to screen (not print)
+await page.emulate_media(media="screen")
+
+# Load HTML content
+await page.set_content(html_content, wait_until="networkidle")
+```
+
+Media emulation:
+
+```css
+/* CSS can target different media */
+@media screen {
+    .header { background: blue; }
+}
+
+@media print {
+    .header { background: gray; }
+}
+```
+
+By using media="screen", we render with screen styles (colors, backgrounds).
+
+Wait strategies:
+
+```python
+wait_until="networkidle"
+# Waits until:
+# - No more than 0-2 network connections for 500ms
+# - All resources loaded (images, fonts, CSS)
+```
+
+Other options:
+
+"load": Wait for load event only (fast, but may miss resources)
+"domcontentloaded": Wait for DOM only (fastest, but no resources)
+"networkidle": Wait for all network activity (slowest, most reliable) ✅
+
+Step 5: Ensure Print Fidelity
+
+```python
+await page.add_style_tag(
+    content="""
+        html, body, * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+    """
+)
+```
+
+What this does:
+
+Forces browsers to preserve colors when printing
+Without this: Backgrounds might be white in PDF
+!important: Overrides any existing styles
+
+Step 6: Wait for Resources
+
+```python
+await page.wait_for_load_state("networkidle")
+await asyncio.sleep(1)  # Extra safety margin
+```
+
+Why double wait?
+
+wait_for_load_state: Ensures network quiet
+asyncio.sleep(1): Extra time for:
+
+Font rendering to complete
+JavaScript animations to settle
+Layout recalculations to finish
+
+
+
+Step 7: Generate PDF
+
+```python
+pdf_bytes = await page.pdf(
+    path=None,  # Return bytes (not save to file)
+    format="A4",
+    landscape=True,
+    print_background=True,
+    prefer_css_page_size=True,
+    margin={
+        "top": "0.5in",
+        "bottom": "0.5in",
+        "left": "0.5in",
+        "right": "0.5in",
+    },
+)
+```
+
+PDF options explained:
+
+```python
+path=None
+# None = return bytes
+# "file.pdf" = save to disk
+
+format="A4"
+# Paper size: A4, Letter, Legal, Tabloid
+# Dimensions: 8.27 × 11.69 inches
+
+landscape=True
+# Orientation: horizontal
+# False = portrait (vertical)
+
+print_background=True
+# Include CSS backgrounds and colors
+# False = white backgrounds (printer-friendly)
+
+prefer_css_page_size=True
+# Respect @page CSS rules
+# Example:
+# @page { size: A4 landscape; margin: 0; }
+
+margin={...}
+# Physical margins on paper
+# Can use: "in", "cm", "mm", "px"
+```
+
+Step 8: Cleanup Resources
+
+```python
+await page.close()
+await asyncio.sleep(0.3)
+
+await context.close()
+await asyncio.sleep(0.3)
+
+await browser.close()
+await asyncio.sleep(0.5)
+```
+
+**Why delays between cleanup?**
+- Ensures Chrome fully releases resources
+- Prevents "connection refused" errors on next request
+- Small performance cost for reliability ✅
+
+### Resource Lifecycle
+
+```
+┌─────────────────────────────────────────┐
+│  async with async_playwright() as p:    │  Playwright connects
+│    │                                     │
+│    ├─> browser = p.chromium.launch()    │  Chrome starts
+│    │     │                               │
+│    │     ├─> context = new_context()    │  Isolated session
+│    │     │     │                         │
+│    │     │     ├─> page = new_page()    │  Tab created
+│    │     │     │     │                   │
+│    │     │     │     ├─> page.pdf()     │  Generate PDF
+│    │     │     │     │                   │
+│    │     │     │     └─> page.close()   │  Close tab
+│    │     │     │                         │
+│    │     │     └─> context.close()      │  End session
+│    │     │                               │
+│    │     └─> browser.close()            │  Quit Chrome
+│    │                                     │
+│    └─> Playwright disconnects           │  Cleanup
+└─────────────────────────────────────────┘
+```
+
+## Security Best Practices
+
+1. Proper Certificate Validation
+
+```python
+# ✅ SECURE (Production)
+context = await browser.new_context(
+    ignore_https_errors=False
+)
+
+# ❌ INSECURE (Never use in production)
+context = await browser.new_context(
+    ignore_https_errors=True
+)
+```
+
+**Why validation matters:**
+
+```
+With validation (ignore_https_errors=False):
+├─> Only trusted certificates accepted
+├─> Man-in-the-middle attacks prevented
+├─> Expired certificates rejected
+└─> Security maintained ✅
+
+Without validation (ignore_https_errors=True):
+├─> ANY certificate accepted
+├─> Man-in-the-middle attacks possible
+├─> Expired certificates accepted
+└─> Security compromised ❌
+```
+
+2. Process Isolation
+
+```python
+# ✅ SECURE (Each request isolated)
+args=["--single-process"]
+
+# ❌ RISKY (Process reuse)
+args=[]  # Default: multi-process with reuse
+```
+
+Security benefit:
+
+User A's data can't leak to User B
+Certificate validation state is fresh
+Memory isolation between requests
+
+3. Resource Limits
+
+```python
+# Set timeout for PDF generation
+try:
+    pdf_bytes = await asyncio.wait_for(
+        page.pdf(...),
+        timeout=30.0  # 30 second limit
+    )
+except asyncio.TimeoutError:
+    # Handle timeout gracefully
+```
+
+Why timeouts matter:
+
+Prevents infinite loops in HTML/JavaScript
+Protects against denial-of-service
+Ensures predictable resource usage
+
+4. Input Validation
+
+```python
+async def generate_pdf(request: PDFRequest):
+    # Validate HTML size
+    if len(request.htmlContent) > 10_000_000:  # 10MB
+        raise HTTPException(400, "HTML too large")
     
-    success_count = sum(1 for r in results if r == 200)
-    print(f"Success: {success_count}/20")
-
-asyncio.run(main())
+    # Validate options
+    allowed_formats = ["A4", "Letter", "Legal"]
+    if request.options.get("format") not in allowed_formats:
+        raise HTTPException(400, "Invalid format")
 ```
 
-**Before fix**:
-Success: 12/20 (60% success rate)
-
-**After fix**:
-Success: 20/20 (100% success rate) ✅
-
-### Test 3: Process Monitoring
-
-```bash
-# Monitor Chrome processes during requests
-watch -n 0.5 'ps aux | grep chrome'
-
-# Before fix:
-# chrome ... --type=renderer ... PID 1234 (persists)
-# chrome ... --type=renderer ... PID 1234 (reused) ❌
-
-# After fix:
-# chrome ... --single-process ... PID 1234
-# (process dies between requests) ✅
-# chrome ... --single-process ... PID 5678 (new)
-```
-
-### Test 4: Memory Leak Check
-
-```bash
-# Run 100 requests and monitor memory
-for i in {1..100}; do
-  curl -X POST http://localhost:8004/pdf-service/generate -d @test.json
-  docker stats pdf-service --no-stream
-done
-
-# Before fix:
-# Memory grows from 500MB → 2GB (leak) ❌
-
-# After fix:
-# Memory stable at 500-700MB ✅
-```
-
-### Test 5: Certificate Validation Verification
+5. Memory Management
 
 ```python
-# Add test endpoint to verify SSL validation
-@app.get("/test-ssl")
-async def test_ssl():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(...)
-        context = await browser.new_context(
-            ignore_https_errors=False
-        )
-        page = await context.new_page()
+# Always cleanup
+finally:
+    page = None
+    context = None
+    browser = None
+    gc.collect()  # Force garbage collection
+```
+
+Memory leak prevention:
+
+Clear all references
+Force garbage collection
+Monitor memory usage in production
+
+6. Logging Without Secrets
+
+```python
+# ✅ SAFE
+print(f"Generated PDF: {len(pdf_bytes)} bytes")
+print(f"Project ID: {request.projectId}")
+
+# ❌ DANGEROUS
+print(f"HTML content: {request.htmlContent}")  # May contain PII
+print(f"S3 Key: {AWS_SECRET_ACCESS_KEY}")     # Exposes secrets
+```
+
+## Production Deployment
+
+Kubernetes Deployment Example
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdf-service
+spec:
+  replicas: 3  # 3 pods for high availability
+  selector:
+    matchLabels:
+      app: pdf-service
+  template:
+    metadata:
+      labels:
+        app: pdf-service
+    spec:
+      containers:
+      - name: pdf-service
+        image: pdf-service:1.0.0
+        ports:
+        - containerPort: 8004
         
-        try:
-            # Try loading Yotta URL
-            await page.goto("https://nm1ecs.yotta.com:9021/health")
-            status = "TRUSTED ✅"
-        except Exception as e:
-            status = f"REJECTED: {str(e)}"
+        # Resource limits (CRITICAL)
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
         
-        await browser.close()
-        return {"status": status}
-
-# Test:
-curl http://localhost:8004/test-ssl
-# Output: {"status": "TRUSTED ✅"}
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        
+        # Environment variables
+        env:
+        - name: YOTTA_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: s3-credentials
+              key: access-key
+        - name: YOTTA_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: s3-credentials
+              key: secret-key
+        
+        # Mount custom CA certificate
+        volumeMounts:
+        - name: ca-cert
+          mountPath: /usr/local/share/ca-certificates/yotta-ca.crt
+          subPath: yotta-ca.crt
+      
+      volumes:
+      - name: ca-cert
+        configMap:
+          name: yotta-ca-cert
 ```
 
----
-
-## Lessons Learned
-
-### 1. Browser Automation is Complex
-
-**Learning**: Browsers maintain extensive internal state:
-- Certificate validation cache
-- DNS cache
-- Connection pools
-- Rendering caches
-- JavaScript engine state
-
-**Takeaway**: Always ensure complete isolation between requests
-
-### 2. Documentation Doesn't Cover Everything
-
-**Learning**: Playwright docs don't mention:
-- Certificate validation caching behavior
-- Process reuse implications
-- `--single-process` use cases
-
-**Takeaway**: Real-world issues require deep diving beyond docs
-
-### 3. Error Messages Can Be Misleading
-
-**Learning**: `net::ERR_ABORTED` suggested:
-- Network failure
-- SSL certificate issue
-- Server rejection
-
-**Reality**: Process state caching issue
-
-**Takeaway**: Don't trust error messages blindly, investigate deeper
-
-### 4. SSL Bypassing is NOT a Solution
-
-**Learning**: Adding bypass flags:
-- Masks the real problem
-- Creates security vulnerabilities
-- Makes debugging harder
-
-**Takeaway**: Fix the root cause, don't bypass symptoms
-
-### 5. Testing Must Cover Edge Cases
-
-**Learning**: Simple tests showed 100% success:
-- Single request → works
-- Same project multiple times → works
-
-**Reality**: Failures appeared with:
-- Different projects alternating
-- Specific HTML content patterns
-
-**Takeaway**: Test realistic usage patterns, not just happy paths
-
-### 6. Kubernetes/Docker Add Complexity
-
-**Learning**: Container environments introduce:
-- Limited `/dev/shm` (requires `--disable-dev-shm-usage`)
-- No GPU (requires `--disable-gpu`)
-- Security restrictions (requires `--no-sandbox`)
-
-**Takeaway**: Flags that work locally may fail in containers
-
-### 7. Certificate Management is Multi-Layered
-
-**Learning**: Installing certificate in ONE place isn't enough:
-- System certificates → for Python/curl
-- NSS database → for Chrome
-- Environment variables → for libraries
-
-**Takeaway**: Understand where each tool reads certificates
-
-### 8. Process Isolation Matters
-
-**Learning**: Shared state causes:
-- Intermittent failures
-- Hard-to-reproduce bugs
-- Race conditions
-
-**Takeaway**: Always prefer isolation over performance optimization
-
-### 9. Debugging Requires Patience
-
-**Timeline of investigation**:
-- Day 1: Identified intermittent failures
-- Day 2: Tried SSL bypass flags (failed)
-- Day 3: Tried persistent contexts (failed)
-- Day 4: Tried temp directories (error)
-- Day 5: Discovered process reuse issue
-- Day 6: Found `--single-process` solution
-- Day 7: Verified and documented
-
-**Takeaway**: Complex issues take time; systematic approach pays off
-
-### 10. Simple Solutions Often Win
-
-**Learning**: Complex attempts failed:
-- Custom certificate databases ❌
-- Persistent contexts ❌
-- Temp directories ❌
-- Many bypass flags ❌
-
-**Solution**: Single flag (`--single-process`) ✅
-
-**Takeaway**: Try simplest solution first, then increase complexity
-
----
-
-## Final Architecture
-
-### Complete Flow
-
-Docker Build:
-├─> Install Yotta CA to system certificates
-├─> Create Chrome NSS database with Yotta CA
-└─> Set HOME=/root for Chrome to find certificates
-
-Container Start:
-├─> Python loads
-├─> Sets SSL environment variables
-└─> Initializes S3 client (uses Yotta CA)
-
-Request Received:
-├─> FastAPI creates async task
-├─> PDFConverter.convert_to_pdf() called
-└─> ISOLATED execution (no shared state)
-
-Chrome Launch:
-├─> Playwright spawns Chrome with --single-process
-├─> Fresh process (no reuse)
-├─> Reads certificates from /root/.pki/nssdb
-└─> Context created with ignore_https_errors=False
-
-PDF Generation:
-├─> Load HTML content
-├─> Chrome validates ALL HTTPS certificates
-├─> Yotta URLs: Validated against Yotta CA ✅
-├─> Unknown URLs: Rejected ❌
-├─> Images load successfully
-└─> PDF generated
-
-Cleanup:
-├─> Page closed
-├─> Context closed
-├─> Browser closed → process dies completely
-├─> All state destroyed
-└─> Memory released
-
-Next Request:
-└─> Completely fresh start (goto step 3)
-
-### Success Metrics
-
-**Before fix**:
-- Success rate: ~60%
-- Intermittent failures: ✅ Present
-- Memory leaks: ✅ Yes
-- Process reuse: ✅ Yes
-- Production ready: ❌ No
-
-**After fix**:
-- Success rate: 100%
-- Intermittent failures: ❌ None
-- Memory leaks: ❌ None
-- Process reuse: ❌ None
-- Production ready: ✅ Yes
-
----
-
-## Appendix: Complete Code Comparison
-
-### Before (Failing Code)
+Monitoring and Observability
 
 ```python
+import time
+from prometheus_client import Counter, Histogram
+
+# Metrics
+pdf_generation_total = Counter(
+    'pdf_generation_total', 
+    'Total PDF generations',
+    ['status']
+)
+
+pdf_generation_duration = Histogram(
+    'pdf_generation_duration_seconds',
+    'PDF generation duration'
+)
+
 async def convert_to_pdf(self, html_content: str, ...) -> bytes:
-    temp_user_data_dir = tempfile.mkdtemp(prefix="chrome_profile_")
+    start_time = time.time()
     
-    browser = await p.chromium.launch(
-        channel="chrome",
-        headless=True,
-        args=[
-            "--no-sandbox",
-            "--disable-gpu",
-            # Many cache-busting flags
-            "--disable-cache",
-            "--disable-application-cache",
-            # ... 10+ more flags
-            
-            # SSL bypass attempts
-            "--ignore-certificate-errors",
-            "--disable-web-security",
-            
-            # The problematic line:
-            f"--user-data-dir={temp_user_data_dir}",  # ❌ Causes error
-        ]
-    )
-    
-    context = await browser.new_context(
-        ignore_https_errors=True  # ❌ Bypassing validation
-    )
-    
-    # ... PDF generation ...
-    
-    # Cleanup
-    shutil.rmtree(temp_user_data_dir, ignore_errors=True)
+    try:
+        # ... PDF generation code ...
+        
+        pdf_generation_total.labels(status='success').inc()
+        return pdf_bytes
+        
+    except Exception as e:
+        pdf_generation_total.labels(status='failure').inc()
+        raise
+        
+    finally:
+        duration = time.time() - start_time
+        pdf_generation_duration.observe(duration)
 ```
 
-### After (Working Code)
+### Scaling Considerations
+
+**Horizontal Scaling:**
+
+```
+1 pod  = ~10 PDFs/minute
+3 pods = ~30 PDFs/minute
+10 pods = ~100 PDFs/minute
+```
+
+**Vertical Scaling:**
+
+```
+Memory: 1GB = handle 5 concurrent PDFs
+Memory: 2GB = handle 10 concurrent PDFs
+Memory: 4GB = handle 20 concurrent PDFs
+```
+
+**Resource Formula:**
+
+```
+pods_needed = (pdfs_per_minute / 10) * 1.5  # 1.5x safety factor
+memory_per_pod = (concurrent_pdfs / 5) * 1GB
+```
+
+Performance Optimization
 
 ```python
-async def convert_to_pdf(self, html_content: str, ...) -> bytes:
-    browser = await p.chromium.launch(
-        channel="chrome",
-        headless=True,
-        args=[
-            # Essential Docker flags only
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            
-            # Minimal performance flags
-            "--disable-background-networking",
-            "--disable-sync",
-            "--disable-translate",
-            "--disable-extensions",
-            "--disable-default-apps",
-            "--no-first-run",
-            "--no-default-browser-check",
-            
-            # THE FIX: Complete process isolation
-            "--single-process",  # ✅
-        ]
+# 1. Reuse Playwright instance (advanced)
+_playwright_instance = None
+
+async def get_playwright():
+    global _playwright_instance
+    if _playwright_instance is None:
+        _playwright_instance = await async_playwright().start()
+    return _playwright_instance
+
+# 2. Connection pooling for S3
+s3_client = boto3.client(
+    's3',
+    config=Config(
+        max_pool_connections=50  # Allow 50 concurrent uploads
     )
-    
-    context = await browser.new_context(
-        ignore_https_errors=False  # ✅ Proper validation
-    )
-    
-    # ... PDF generation ...
-    
-    # Simple cleanup (no temp directories)
+)
+```
+
+3. Async S3 uploads
+
+```python
+import aioboto3
+async def upload_pdf_async(pdf_bytes: bytes, s3_key: str):
+session = aioboto3.Session()
+async with session.client('s3') as s3:
+await s3.put_object(
+Bucket=S3_BUCKET,
+Key=s3_key,
+Body=pdf_bytes
+)
 ```
 
 ---
 
 ## Conclusion
 
-**Problem**: Intermittent SSL certificate validation failures in Playwright PDF generation
+This guide covered:
 
-**Root Cause**: Chrome process reuse causing stale certificate validation cache
+1. ✅ Playwright architecture and internals
+2. ✅ SSL certificate management (3-layer approach)
+3. ✅ Docker environment configuration
+4. ✅ Production-grade Python implementation
+5. ✅ Security best practices
+6. ✅ Deployment and scaling strategies
 
-**Solution**: `--single-process` flag for complete process isolation
+**Key Takeaways:**
 
-**Impact**: 100% reliable PDF generation with proper security
+- Playwright uses real Chrome = perfect rendering
+- SSL requires system certs + NSS database + environment variables
+- Process isolation (`--single-process`) prevents state leakage
+- Proper cleanup prevents memory leaks
+- Security through certificate validation, not bypassing
 
-**Time to Resolution**: 7 days of investigation, testing, and verification
-
-**Final Status**: Production-ready, secure, and reliable ✅
+---
