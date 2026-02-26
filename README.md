@@ -1,47 +1,59 @@
-# 🩺 Treatment Planner: Test Cases
+# Advanced Patient Context Retrieval — Validation Report
 
-This document provides a detailed breakdown of 5 critical test cases for the **Treatment Planner** functionality. It focuses on the input logic, verified results, and performance analysis.
+## 📊 1. Executive Summary
 
----
+This report documents the **stress-testing** of the Patient Context Retrieval agent using a high-density clinical document (ANVI Diagnostics report). The focus was shifted from general summaries to the **extraction of specific laboratory values** and deep-data synthesis from long-form medical records.
 
-## 📋 1. Input & Output Summary Table
-
-| Test Case | Treatment Planner Input (`treatment_planner_text`) | Verified Results Output | Test Status |
-| :--- | :--- | :--- | :--- |
-| **TC-TP-01** (Positive) | "Patient needs a Hair Transplant and Laser Hair Removal dummuy2. For products, use DermaCo face wash twice daily, Himalaya skin cream, and Nivea moisturizing lotion. Lab tests: CBC, HAIR LOSS INVESTIGATION MALE, and Thyroid Function Test (TFT). Split this into a surgical plan and a post-op care plan." | **Plan A: Surgical Plan**<br>• **Services:** Hair Transplant (`0a3b2c...`, ✅), Laser Hair Removal (`b1c2d3...`, ✅)<br>• **Lab Tests:** CBC (`8ffb8f...`, ✅), HAIR LOSS (✅), TFT (✅)<br><br>**Plan B: Post-Op Care Plan**<br>• **Products:** DermaCo face wash (✅), Himalaya skin cream (✅), Nivea moisturizing lotion (✅) | **PASS** |
-| **TC-TP-02** (Positive) | "Patient requires Perineoplasty and Skin Brightening Glow IV Drip. Prescribe Paracetamol 500mg as needed for pain and DermaCo sunscreen. Lab tests: Estradiol level and Blood Group & RH." | **Plan A: Treatment Plan**<br>• **Services:** Perineoplasty (`3e4f5g...`, ✅), Skin Brightening IV Drip (`9h8i7j...`, ✅)<br>• **Products:** Paracetamol (`p1q2r3...`, ✅), DermaCo sunscreen (`d4e5f6...`, ✅)<br>• **Lab Tests:** Estradiol level (✅), Blood Group & RH (✅) | **PASS** |
-| **TC-TP-03** (Negative) | "Patient needs Quantum Healing Session and Intergalactic Skin Scrub. Use Kryptonite Cream twice a day. Tests: Alien DNA Check and Mars Gravity Test." | **Plan A: Treatment Plan**<br>• **Services:** Quantum Healing Session (❌), Intergalactic Skin Scrub (❌)<br>• **Products:** Kryptonite Cream (❌)<br>• **Lab Tests:** Alien DNA Check (❌), Mars Gravity Test (❌)<br><br>_System identifies items as non-existent in DB._ | **PASS** |
-| **TC-TP-04** (Negative) | `""` (Empty String) | **Planner Bypassed**<br>• Status: Planner not triggered (empty input)<br>• Response: General healthcare answer<br>• Success: `true` | **PASS** |
-| **TC-TP-05** (Hard Case) | "Patient is a 42-year-old transgender individual seeking kwqjdks. Also mentioned oihhds in initial consultation. Current medications: Cipla Ltd supplements and Sun Pharma multi-vitamin protocol. Before any surgical procedure, run SLE (Systemic Lupus Erythematosus) Panel to rule out autoimmune conditions. Also check Glucose - Fasting. For immediate recovery, use Suflola and Saridon." | **Plan A: Treatment Plan A**<br>• **Services:** Top Surgery (`6cfc54...`, ✅) [Resolved from `kwqjdks`]<br>• **Products:** Cipla Ltd (❌), Sun Pharma (❌)<br>• **Lab Tests:** SLE PANEL (`8ffb8f...`, ✅)<br><br>**Plan B: Treatment Plan B**<br>• **Services:** women wellness support (❌) [Resolved from `oihhds`]<br>• **Products:** Suflola (❌), Saridon (`383f16...`, ✅)<br>• **Lab Tests:** Glucose - Fasting (`7af28c...`, ✅) | **PASS** |
+The validation confirms that the agent successfully:
+- Navigates multi-step database queries.
+- Handles dense, unstructured text to find specific markers (e.g., C3, C4, Anti-Beta 2 Gp1).
+- Extracts data points that are often buried deep within long reports.
 
 ---
 
-## 🔍 2. Scope & Verification Analysis
+## 🔍 2. Deep-Data Retrieval: Test Case Execution
 
-| Test Case | Scope of Test | Verification Logic | Observed Results |
-| :--- | :--- | :--- | :--- |
-| **TC-TP-01** | Categorization & Plan Splitting | Extracts services, products, and labs. Validates against DB. Creates distinct Plan IDs. | Full verification. Successful split into Surgical and Post-Op. |
-| **TC-TP-02** | Simple plan & Dosage extraction | Matches Perineoplasty and IV Drip in DB. Correlates medication to product tables. | Successful extraction of labs and verification of services. |
-| **TC-TP-03** | Fictional Input Handling | Runs `ILIKE` queries for unknown terms. Returns zero matches. | Correctly labels all items as `verified: false`. No hallucinations. |
-| **TC-TP-04** | Empty Input Boundary | Checks conditional logic for triggering the planner agent. | **Bypass Triggered:** System routes to general query agent. |
-| **TC-TP-05** | Ambiguous/Dummy Resolver | Resolves dummy names (`kwqjdks`, `oihhds`) using database ILIKE keywords. | Dummy names resolved to actual services. Mixed verification. |
+The following table details the scenarios where the agent was tasked with retrieving specific values from a long health report rather than relying on pre-existing summaries.
 
----
-
-## ⏱️ 3. Execution Time Analysis
-
-| Test Case | Database Query Time | Agent Processing Time | Total Execution Time | Efficiency |
-| :--- | :---: | :---: | :---: | :---: |
-| **TC-TP-01** | 2.4s | 8.9s | **11.3s** | ✅ High |
-| **TC-TP-02** | 3.1s | 13.9s | **17.0s** | 🔵 Medium |
-| **TC-TP-03** | 1.8s | 5.7s | **7.5s** | ✅ High |
-| **TC-TP-04** | 0.0s | 2.7s | **2.7s** | ⚡ Instant |
-| **TC-TP-05** | 4.5s | 15.8s | **20.3s** | ⚠️ Low |
+| ID | Targeted Retrieval Query | Exact Agent Output (Specific Value Extraction) |
+|:---|:---|:---|
+| **TC 01** | What was the exact Serum Creatinine result in the ANVI Diagnostics report from Aug 2025? | The Serum Creatinine level from the ANVI Diagnostics report dated August 2025 is **1.2 mg/dl**, which falls within the normal reference range of 0.6-1.5 mg/dl. |
+| **TC 02** | Is the patient's Complement 3 (C3) level within the range? | The patient's Complement 3 (C3) level is reported as **78.0 mg/dl**, which is **below** the normal reference range of 90-180 mg/dl. |
+| **TC 03** | Give me the specific values for Anti Beta 2 Gp1 IgG and IgM. | Anti Beta 2 Gp1 IgG: **4.0 AU/mL**; Anti Beta 2 Gp1 IgM: **2.0 AU/mL**. Both values are within normal limits (Ref: 16-24 AU/mL). |
+| **TC 04** | Compare Glucose levels from Aug 30th with reference values. | Patient Name: Mahesh Vuda. Glucose Level: **83 mg/dl** (Ref: 80-140 mg/dl). **Conclusion:** Within normal limits. |
+| **TC 05** | Was the Total WBC Count within the 4000-11000 range? | The Total WBC Count for Mr. Mahesh Vuda is **6,800 /CU MM**, which is within the normal range. |
+| **TC 06** | Summarize Hematology findings: MCV and MCH values. | MCV: **81 fl** (Ref: 76-96); MCH: **28 pg** (Ref: 26-32). Both values are within normal ranges. |
+| **TC 07** | Does the patient have any recorded allergies? | Mahesh Vuda has **no recorded allergies** listed. Latest Booking: Nov 17, 2025. |
 
 ---
 
-## 📊 Summary of Findings
-*   **Performance:** Average response time is approximately **11.8 seconds**.
-*   **Accuracy:** High resolution of dummy/ambiguous service names via database mapping.
-*   **Edge Cases:** Empty inputs gracefully bypass the planner to prevent errors.
-*   **Verification:** System strictly enforces database verification.
+## ⚡ 3. Speed & Performance Analysis
+
+End-to-end latency tracking for "Deep Retrieval" scenarios (Target: < 5.0s).
+
+| ID | Response Time | Status | Bottleneck Analysis |
+|:---|:---|:---|:---|
+| **TC 01** | `12.5s` | ⚠️ Warning | Agent self-corrected SQL query for Serum Creatinine. |
+| **TC 02** | `7.2s` | ✅ Fast | Direct retrieval from file summary. |
+| **TC 03** | `8.1s` | 🔵 Optimal | Extracted multiple nested values from a single pass. |
+| **TC 04** | `9.4s` | 🔵 Optimal | Synthesis of clinical data vs reference ranges. |
+| **TC 05** | `6.8s` | ✅ Fast | Targeted retrieval of a single numeric marker. |
+| **TC 06** | `7.4s` | ✅ Fast | Synthesis of hematology markers. |
+| **TC 07** | `11.2s` | ⚠️ Warning | Correlated 3 different DB tables (Patient, Summary, Booking). |
+
+---
+
+## 🚀 4. Optimization Roadmap
+
+### 📉 Current Performance
+- **Average Retrieval Time:** ~8.5s for specific values in long reports.
+- **Identified Bottleneck:** Multi-table correlations (e.g., checking allergies against specific booking slots) increase latency to >10s.
+
+### 🛠️ Speed Strategy
+We are implementing the following to bring average response times **under 5 seconds**:
+1. **Asynchronous Tool Calling:** Parallelizing DB and file processing lookups.
+2. **Context Caching:** Maintaining metadata for frequently accessed patient documents.
+3. **Optimized SQL Joins:** Reducing the overhead of correlating Patient, Summary, and Booking tables.
+
+---
+*End of Validation Report*
