@@ -1,407 +1,770 @@
-# 🏥 Aadhya AI — Product Scope & Feature Reference
-
-> **Aadhya** is an intelligent aesthetics & healthcare AI assistant powering the end-to-end clinical journey — from a patient's first query to a doctor's treatment plan — with memory, safety, and real-time database verification built in.
-
----
-
-## 1. 💬 General Chat (Ask Anything)
-
-Patients and doctors can have a natural, ongoing conversation with Aadhya. The assistant knows who it's talking to and adjusts its tone and depth accordingly.
-
-**What it does:**
-
-- Answers questions about **aesthetics services, treatments, skin care, medications, and symptoms** in plain language
-- Searches the clinic's live **doctor & service database** to give accurate, real-time answers — no hallucination
-- Recommends specific doctors by specialty and city when asked (e.g. *"Find a dermatologist in Chennai"*)
-- Pulls from a **RAG knowledge base** for in-depth medical questions; falls back to internet search for general research
-- **Doctor mode** — a professional medical assistant persona for evidence-based clinical answers
-- **Patient mode (AADHYA)** — a friendly, empathetic persona that encourages booking and guides aesthetic goals
-- All personally identifiable information (emails, phone numbers) in responses is **automatically masked**
-- Maintains full **session memory** — Aadhya remembers what was said earlier in the same conversation via Mem0
-
-**Testable scenarios:**
-
-| # | Scenario |
-|---|---|
-| T1 | Ask about an aesthetic service → should return DB results, never hallucinate |
-| T2 | Ask for a doctor in a city → should return real doctors from DB |
-| T3 | Ask a general medical question → should use RAG / internet |
-| T4 | Say "Hi" → should get AADHYA introduction |
-| T5 | Ask same question twice in a session → Aadhya should remember context |
-| T6 | Response containing phone/email → should be masked in output |
+# 🏥 Aadhya AI — Complete System Architecture
+### *Built for DimensionLeap · March 2026*
 
 ---
 
-## 2. 📄 File Upload & Document Processing
-
-Users can upload medical documents (PDFs or images) and Aadhya reads, interprets, and stores them intelligently. This module contains **four distinct sub-features**, each independently testable.
+> **What you're reading:** A complete, visual guide to every intelligent capability that has been built inside Aadhya AI — from how a patient types a question to how the AI finds the right answer in the database, remembers conversations, and keeps data private. Every diagram is designed to be easy to understand without a technical background.
 
 ---
 
-### 2a. 🔍 Healthcare Detection (Keyword-Based Fast Filter)
+## 📌 Table of Contents
 
-**What it does:**
-
-- Before any AI analysis, the system scans the extracted text for **120+ predefined healthcare keywords** (e.g. blood, prescription, diagnosis, hemoglobin, botox, ultrasound, patient, clinic…)
-- If **at least one keyword matches**, the document is treated as healthcare-related and processing continues
-- If **no keywords match**, the document is immediately rejected — no AI call is made, no data is saved
-- Eliminates ~16 seconds of latency for non-medical uploads
-
-**Testable scenarios:**
-
-| # | Input | Expected Output |
-|---|---|---|
-| T1 | Upload a medical lab report | Detected as healthcare → processed fully |
-| T2 | Upload a food menu or random PDF | Rejected instantly with "not healthcare-related" message |
-| T3 | Upload an image of a prescription | Keywords found in OCR/vision output → processed |
-| T4 | Upload a blank or near-empty PDF | No keywords → rejected |
+1. [The Big Picture — Cloud Architecture](#1-the-big-picture--cloud-architecture)
+2. [How Agents Talk to Each Other — Agentic Workflow](#2-how-agents-talk-to-each-other--agentic-workflow)
+3. [How Memory Works — Mem0](#3-how-memory-works--mem0)
+4. [Feature: General Chat (Ask Anything)](#4-feature-general-chat--ask-anything)
+5. [Feature: File Upload & Document Processing](#5-feature-file-upload--document-processing)
+6. [Feature: Pre-Consultation Chat](#6-feature-pre-consultation-chat)
+7. [Feature: Follow-Up Care Chat](#7-feature-follow-up-care-chat)
+8. [Feature: Treatment Planner (Doctor Tool)](#8-feature-treatment-planner--doctor-tool)
+9. [Feature: Product & Prescription Validation](#9-feature-product--prescription-validation)
+10. [Feature: Personalised Recommendations](#10-feature-personalised-recommendations)
+11. [Feature: Doctor–Patient Overview](#11-feature-doctorpatient-overview)
+12. [Feature: Safety, Privacy & Security](#12-feature-safety-privacy--security)
+13. [What Has Been Built — Feature Completion](#13-what-has-been-built--feature-completion)
 
 ---
 
-### 2b. 🏷️ Report Type Identification & Verification
+## 1. The Big Picture — Cloud Architecture
 
-**How it works — two distinct steps:**
+Think of Aadhya AI as a smart hospital assistant that lives in the cloud. A patient or doctor opens an app, types a question, and within seconds they get an intelligent, accurate answer. Behind the scenes, a sophisticated system of AI agents, databases, and memory services work together.
 
-#### Step 1 — Automatic Type Identification (always runs)
-Every healthcare document that passes the keyword filter is **automatically classified** by the AI into one of exactly **5 fixed categories**:
+```mermaid
+graph TB
+    subgraph CLIENT["🌐 Client Layer"]
+        APP["📱 Mobile / Web App\n(Patient or Doctor)"]
+    end
 
-| `doc_type` value | What it means | Real-world examples |
-|---|---|---|
-| `prescription` | A doctor's written prescription for medicines | Doctor Rx slip, e-prescription, chemist prescription |
-| `lab_report` | Any pathology, blood, or diagnostic lab result | **CBC / Complete Blood Count**, **Blood Sugar (HbA1c, FBS, PPBS)**, **Lipid Profile**, **Liver Function Test (LFT)**, **Kidney Function Test (KFT/RFT)**, **Urine Routine**, **Thyroid Profile (TSH, T3, T4)**, **Vitamin D / B12 / Iron levels**, **Hemoglobin**, **BMI Report (if from a diagnostic lab)** |
-| `diagnosis` | A formal diagnosis or clinical assessment note | Dermatologist diagnosis note, discharge summary with confirmed diagnosis |
-| `medical_history` | A record of past conditions and health background | Patient medical history card, case summary from a previous hospital, OPD card |
-| `general` | Any healthcare document that doesn't fit the above | Consent forms, insurance documents, vaccination certificates, wellness reports |
+    subgraph API["⚡ API Gateway Layer"]
+        FAST["FastAPI Server\n(api_server.py)\nPort 8000"]
+        MASK["🔒 PII Masking\n(Emails & Phones auto-hidden)"]
+        POOL["🔗 Connection Pool\n(Up to 50 concurrent users)"]
+    end
 
-> ℹ️ The `doc_type` is always returned in the API response under `processed_files[].doc_type`, regardless of whether `report_type` verification was requested.
+    subgraph AGENTS["🤖 Agentic Intelligence Layer — CrewAI"]
+        ORCH["🧠 Orchestrator Agent\n(Decides who handles what)"]
+        SECURITY["🛡️ Security Agent\n(Validates all inputs)"]
+        QUERY["💬 Query Agent\n(Answers questions)"]
+        FILE["📄 File Processor Agent\n(Reads & summarises docs)"]
+        BOOKING["📅 Booking Agent\n(Pre-consultation chat)"]
+        MED["💊 Medication Agent\n(Safe medicine suggestions)"]
+        FOLLOWUP["🔄 Follow-Up Agent\n(Post-treatment check-ins)"]
+        TREATMENT["🩺 Treatment Planner Agent\n(Doctor's structured plans)"]
+        RECOMMEND["⭐ Recommendation Agent\n(Personalised suggestions)"]
+        PATIENT_OV["👨‍⚕️ Patient Overview Agent\n(Doctor's patient chatbot)"]
+        VALID["✅ Validation Agent\n(Document & prescription checks)"]
+        SKIN["🧴 Skin Profile Agent\n(Product matching by skin type)"]
+    end
 
----
+    subgraph MCP["🔌 MCP Tool Server (Model Context Protocol)"]
+        MCP_SRV["MCP Server\n(server.py)\nBridges AI to Database"]
+        DB_TOOL["🗄️ run_query\n(execute SQL)"]
+        RAG_TOOL["🔍 rag_search\n(vector similarity)"]
+        FILE_TOOL["📎 file_search\n(uploaded docs)"]
+    end
 
-#### Step 2 — Report Type Verification (only runs when `report_type` is passed)
+    subgraph MEMORY["🧠 Memory Layer"]
+        MEM0["Mem0 Memory\n(Long-term per-user)"]
+        QDRANT["Qdrant Vector Store\n(Stores memory embeddings)"]
+        SQLITE_MEM["SQLite History DB\n(Memory change log)"]
+    end
 
-When the calling system sends a `report_type` parameter (a **free-text string** describing what the document is expected to be), the system activates the **Validation Checker agent** to compare the expected type against the identified `doc_type` and the document's content/summary.
+    subgraph RAG_KB["📚 Knowledge Base — RAG"]
+        CHROMA["ChromaDB\n(Medical PDF knowledge)"]
+        PDFSTORE["📁 PDF Documents\n(Aesthetics & Medical guides)"]
+    end
 
-- The caller passes `report_type` as any natural-language string — e.g. `"blood report"`, `"CT scan"`, `"BP report"`, `"BMI report"`, `"CBC test"`, `"prescription"`
-- The Validation Checker agent reads the `doc_type` + the AI-generated summary and determines whether the uploaded document is a reasonable match for what was requested
-- Returns `"is_verified": true` or `"is_verified": false` in the response
+    subgraph DB["🗄️ PostgreSQL Database"]
+        DOCTORS["doctor_details\ndoctor_clinic_details\ndoctor_service"]
+        PATIENTS["patient_profile\npatient_booked_slot\nfile_summaries"]
+        SERVICES["services\nservice_onboarding_details\ndiagnostic_services"]
+        PRODUCTS["product\nproduct_details\nskin_profiles"]
+    end
 
-**How the matching works (AI-based, not keyword-exact):**
+    subgraph AZURE["☁️ Azure OpenAI"]
+        GPT["GPT-4o-mini\n(LLM — reasoning)"]
+        EMBED["text-embedding-ada-002\n(Turns text into vectors)"]
+        VISION["GPT-4o Vision\n(Reads images & scanned docs)"]
+    end
 
-| `report_type` sent by caller | Uploaded document | `is_verified` result |
-|---|---|---|
-| `"prescription"` | Prescription slip | `true` |
-| `"blood report"` | CBC / Blood count report | `true` |
-| `"BMI report"` | Lab report with weight/height/BMI values | `true` |
-| `"BP report"` | Blood pressure monitoring chart | `true` |
-| `"CT scan"` | CT scan report / radiology report | `true` |
-| `"city scan"` (typo for CT scan) | CT scan report | `true` (AI understands intent) |
-| `"thyroid report"` | TSH/T3/T4 lab report | `true` |
-| `"HbA1c"` | Blood sugar lab report | `true` |
-| `"blood report"` | Prescription slip | `false` (doc_type mismatch) |
-| `"CT scan"` | Liver Function Test report | `false` |
-| `"prescription"` | Medical history card | `false` |
-| `"lab report"` | Random consent form | `false` |
+    APP -->|"HTTPS POST /orch"| FAST
+    FAST --> MASK
+    FAST --> POOL
+    FAST --> ORCH
+    ORCH --> SECURITY
+    SECURITY -->|"✅ Approved"| QUERY
+    SECURITY -->|"✅ Approved"| FILE
+    SECURITY -->|"✅ Approved"| BOOKING
+    SECURITY -->|"✅ Approved"| MED
+    SECURITY -->|"✅ Approved"| FOLLOWUP
+    SECURITY -->|"✅ Approved"| TREATMENT
+    SECURITY -->|"✅ Approved"| RECOMMEND
+    SECURITY -->|"✅ Approved"| PATIENT_OV
+    SECURITY -->|"✅ Approved"| SKIN
 
----
+    QUERY --> MCP_SRV
+    FILE --> MCP_SRV
+    BOOKING --> MCP_SRV
+    MED --> MCP_SRV
+    FOLLOWUP --> MCP_SRV
+    TREATMENT --> MCP_SRV
+    RECOMMEND --> MCP_SRV
+    PATIENT_OV --> MCP_SRV
+    SKIN --> MCP_SRV
+    VALID --> MCP_SRV
+    FILE --> VALID
 
-**Testable scenarios:**
+    MCP_SRV --> DB_TOOL
+    MCP_SRV --> RAG_TOOL
+    MCP_SRV --> FILE_TOOL
 
-| # | `report_type` sent | Document uploaded | `doc_type` identified | `is_verified` |
-|---|---|---|---|---|
-| T1 | `"prescription"` | Doctor's Rx slip | `prescription` | `true` |
-| T2 | `"blood report"` | CBC / Blood Count lab report | `lab_report` | `true` |
-| T3 | `"BMI report"` | BMI measurement report from diagnostic lab | `lab_report` | `true` |
-| T4 | `"BP report"` | Blood pressure monitoring record | `lab_report` | `true` |
-| T5 | `"CT scan"` | CT scan radiology report | `diagnosis` or `lab_report` | `true` |
-| T6 | `"city scan"` (common voice/typo) | CT scan report | `lab_report` | `true` (AI understands context) |
-| T7 | `"thyroid report"` | TSH / T3 / T4 test result | `lab_report` | `true` |
-| T8 | `"sugar report"` | HbA1c / Blood glucose test | `lab_report` | `true` |
-| T9 | `"blood report"` | Prescription slip | `prescription` | `false` (wrong doc type) |
-| T10 | `"CT scan"` | LFT (Liver Function Test) | `lab_report` | `false` (different scan) |
-| T11 | `"prescription"` | Medical history card | `medical_history` | `false` |
-| T12 | *(not sent / null)* | Any document | `lab_report` / etc. | No `is_verified` field in response |
-| T13 | `"lab report"` | Non-healthcare document (e.g. food invoice) | Rejected at Step 1 | File rejected before verification runs |
+    DB_TOOL --> DB
+    RAG_TOOL --> PATIENTS
+    RAG_TOOL --> CHROMA
 
----
+    ORCH <--> MEM0
+    MEM0 --> QDRANT
+    MEM0 --> SQLITE_MEM
 
-**What the API response looks like when `report_type` is passed:**
+    CHROMA <-- PDFSTORE
+    FAST <--> AZURE
+    MCP_SRV <--> AZURE
+    FILE_TOOL --> VISION
 
-```json
-{
-  "processed_files": [{
-    "file_url": "...",
-    "success": true,
-    "file_type": "pdf",
-    "is_healthcare_related": true,
-    "summary": "...",
-    "description": "...",
-    "doc_type": "lab_report",
-    "is_verified": true,
-    "name_verified": true
-  }]
-}
+    style CLIENT fill:#e8f4fd,stroke:#2196F3
+    style API fill:#fff3e0,stroke:#FF9800
+    style AGENTS fill:#e8f5e9,stroke:#4CAF50
+    style MCP fill:#fce4ec,stroke:#E91E63
+    style MEMORY fill:#ede7f6,stroke:#673AB7
+    style RAG_KB fill:#e0f2f1,stroke:#009688
+    style DB fill:#fff8e1,stroke:#FFC107
+    style AZURE fill:#e3f2fd,stroke:#1565C0
 ```
 
-> ⚠️ `is_verified` only appears in the response when `report_type` was part of the request. If `report_type` is omitted, `is_verified` is not present — only `doc_type` is.
+### In Plain English
+
+| Layer | What It Does |
+|---|---|
+| **Client App** | Where the patient or doctor types their question |
+| **FastAPI Server** | The front door — receives requests, sends replies, and masks sensitive info |
+| **Orchestrator Agent** | The traffic controller — reads the request and decides which specialist agent to call |
+| **Security Agent** | The bouncer — every single message is checked before any AI agent sees it |
+| **Specialist Agents** | 10 purpose-built AI agents, each expert in their own task |
+| **MCP Tool Server** | The bridge that lets AI agents safely talk to the database |
+| **PostgreSQL Database** | Where all real clinic data lives — doctors, patients, services, products |
+| **Mem0 Memory** | Long-term memory — Aadhya remembers patients across sessions |
+| **RAG Knowledge Base** | A scanned library of medical PDFs for answering clinical questions |
+| **Azure OpenAI** | The AI brain — GPT-4o-mini for reasoning, Ada-002 for semantic search |
 
 ---
 
-### 2c. 👤 File Name / Patient Name Verification
+## 2. How Agents Talk to Each Other — Agentic Workflow
 
-**What it does:**
+Every request flows through a specific sequence of agents. This ensures accuracy, safety, and the right answer every time.
 
-- When a file is uploaded, the system checks if the **patient's name mentioned inside the document** matches the **account holder's name** in the database
-- Looks up the patient profile via `user_id` and compares (case-insensitive, ignoring spaces)
-- Returns `true` if the name matches, `false` if it does not match or no name is found in the document
-- Designed to prevent patients from submitting someone else's reports
+```mermaid
+sequenceDiagram
+    participant U as 👤 User (App)
+    participant API as ⚡ FastAPI
+    participant SEC as 🛡️ Security Agent
+    participant ORCH as 🧠 Orchestrator
+    participant MEM as 🧠 Mem0 Memory
+    participant SPEC as 🤖 Specialist Agent
+    participant MCP as 🔌 MCP Server
+    participant DB as 🗄️ PostgreSQL
+    participant AI as ☁️ Azure OpenAI
 
-**Testable scenarios:**
+    U->>API: POST /orch with session_id, user_id, input
+    API->>API: Create isolated OrchestrationCrew per request
+    API->>SEC: Validate input — healthcare check + jailbreak check
+    
+    alt Input is invalid or non-healthcare
+        SEC-->>API: Rejected
+        API-->>U: I can only help with healthcare topics
+    else Input is valid
+        SEC-->>ORCH: Approved
+        ORCH->>MEM: Search past memories for this user
+        MEM-->>ORCH: Relevant past memories if any
+        ORCH->>SPEC: Delegate to right agent with full context
+        
+        loop Agent thinks up to 10 iterations
+            SPEC->>MCP: Call tool — database_query or rag_search
+            MCP->>DB: Execute SQL query
+            DB-->>MCP: Real data rows
+            MCP-->>SPEC: Formatted results
+            SPEC->>AI: Reason about results and formulate answer
+            AI-->>SPEC: Next thought or final answer
+        end
+        
+        SPEC-->>ORCH: Final answer as JSON
+        ORCH->>MEM: Save conversation to memory in background
+        ORCH-->>API: JSON response
+        API->>API: Mask PII — emails, phone numbers
+        API-->>U: Clean, private, accurate response
+    end
+```
 
-| # | Input | Expected Output |
-|---|---|---|
-| T1 | Upload a report containing the same name as the account | Name verification returns `true` |
-| T2 | Upload a report with a different patient's name | Name verification returns `false` |
-| T3 | Upload a report with no patient name on it | Returns `false` (name not found) |
-| T4 | Upload with a user_id that does not exist in DB | Returns `false` |
+### How the Orchestrator Decides Which Agent to Use
 
----
+```mermaid
+flowchart TD
+    REQ["📨 Incoming Request"] --> SEC["🛡️ Security Agent validates first"]
+    SEC -->|"Rejected"| BLOCK["🚫 Blocked Response"]
+    SEC -->|"Approved"| ROUTE{"🧠 Orchestrator reads request fields"}
 
-### 2d. 🧠 AI Document Summary Generation
+    ROUTE -->|"input + general question"| QA["💬 Query Agent + Medication Agent"]
+    ROUTE -->|"file_urls present"| FILE["📄 File Processor Agent + Validation Agent"]
+    ROUTE -->|"slot_id present"| BOOK["📅 Booking Agent — Pre-consultation"]
+    ROUTE -->|"followUp: true"| FU["🔄 Follow-Up Agent"]
+    ROUTE -->|"treatment_planner_text"| TP["🩺 Treatment Planner Agent"]
+    ROUTE -->|"recommendations: true"| REC["⭐ Recommendation Agent"]
+    ROUTE -->|"skinValues present"| SKIN["🧴 Skin Profile Agent"]
+    ROUTE -->|"patient_id + doctor user"| POV["👨‍⚕️ Patient Overview Agent"]
+    ROUTE -->|"validation: true"| VAL["✅ Validation Agent"]
 
-**What it does:**
+    QA --> OUT["📤 JSON Response"]
+    FILE --> OUT
+    BOOK --> OUT
+    FU --> OUT
+    TP --> OUT
+    REC --> OUT
+    SKIN --> OUT
+    POV --> OUT
+    VAL --> OUT
 
-- For healthcare-related documents, Aadhya generates a **structured, readable AI summary** using a unified medical prompt
-- **For PDFs:** extracts text directly; if the PDF is scanned/image-only, runs **OCR (pytesseract)** first
-- **For images:** uses **AI Vision** (GPT-4o) to read and interpret the image
-- The summary follows a consistent structure:
-  - 🏥 Hospital & Patient Profile
-  - 🩺 Comprehensive Medical Summary (findings, diagnosis, clinical insights)
-  - 💊 Treatment & Medications (each medicine with purpose)
-  - 📊 Consolidated Data Table (lab values, vitals)
-  - ⚠️ Medical Disclaimer
-- If a field is missing or unreadable, it is **silently omitted** — no placeholders like "N/A" or "Unknown"
-- The summary and full extracted content are saved to the patient's database record with **vector embeddings** for future RAG search
-
-**Testable scenarios:**
-
-| # | Input | Expected Output |
-|---|---|---|
-| T1 | Upload a clear typed prescription PDF | Summary shows doctor, medicines with purpose, clear structure |
-| T2 | Upload a scanned/handwritten prescription (image PDF) | OCR runs, summary still generated |
-| T3 | Upload a lab report image (JPG) | Vision API reads it, lab values appear in data table |
-| T4 | Document has no patient name | Name section silently omitted — no "N/A" shown |
-| T5 | Upload same file twice | Both saved; both searchable via RAG |
-
----
-
-## 3. 🩺 Pre-Consultation Chat
-
-Before a patient's scheduled appointment, Aadhya conducts a dynamic conversational intake assessment — like a smart nurse gathering information for the doctor.
-
-**What it does:**
-
-- Triggered by a **booking slot ID** tied to a real, confirmed appointment
-- Greets the patient and collects information through natural **conversation**, not a form
-- Covers: chief complaint, personal medical history, family history, surgical history, medications, allergies, lifestyle, and social context
-- Uses **multiple-choice questions (MCQ)** for structured topics, plain text for open-ended ones
-- Context tags (`[CONTEXT: FAMILY_HISTORY]`, `[CONTEXT: PERSONAL_HISTORY]`) ensure answers are attributed correctly
-- Tracks full conversation history — patient never needs to repeat themselves
-- Automatically detects when all key areas are covered and **gracefully closes the chat**
-- On completion, generates a **narrative clinical summary** (flowing paragraphs — not a form) and saves it to the appointment record
-
-**Summary style (what the doctor reads):**
-
-> *"Priya Sharma, a 26-year-old woman, presents with a primary concern of **persistent acne** affecting her confidence over the past year. She has a known personal history of **hypertension** currently managed with medication. Her family history is notable for **Type 2 Diabetes** on the maternal side. She reports no prior surgeries and was not willing to disclose alcohol consumption habits."*
-
-**Testable scenarios:**
-
-| # | Scenario | Expected Output |
-|---|---|---|
-| T1 | Start chat with valid slot_id | Aadhya greets and begins intake |
-| T2 | Answer with "Skip" | Summary says "Patient was not willing to disclose X" |
-| T3 | Answer with "Yes" to a condition question | Condition confirmed in summary |
-| T4 | Complete all questions | Status becomes `end`, summary saved to DB |
-| T5 | Read the saved summary | Reads as clinical narrative, NOT a form |
-| T6 | Answer family history after personal history question | Context tags ensure correct attribution |
-
----
-
-## 4. 🔄 Follow-Up Care Chat
-
-After a patient completes a treatment, Aadhya handles automated check-in conversations.
-
-**What it does:**
-
-- Triggered by follow-up date and the completed appointment's slot
-- Generates **treatment-specific questions** — different questions for Botox vs. Hair Transplant vs. Laser
-- Covers: treatment results, side effects, satisfaction, progress toward goals, need for more sessions
-- Conducts the check-in as a natural conversation, tracking all responses over multiple turns
-- All responses stored for the doctor's review
-
-**Testable scenarios:**
-
-| # | Scenario | Expected Output |
-|---|---|---|
-| T1 | Follow-up for Botox appointment | Questions relevant to Botox results and side effects |
-| T2 | Follow-up for Hair Transplant | Questions about hair growth, scalp condition |
-| T3 | Multi-turn response | Aadhya remembers previous answers in same session |
+    style BLOCK fill:#ffcdd2,stroke:#c62828
+    style OUT fill:#c8e6c9,stroke:#2e7d32
+```
 
 ---
 
-## 5. 💊 Treatment Planner (Doctor Tool)
+## 3. How Memory Works — Mem0
 
-The doctor types natural post-consultation notes and Aadhya converts them into a verified, structured treatment plan.
+Aadhya does not forget. When a patient chats today, Aadhya remembers it next week. This is powered by **Mem0** — a vector memory system backed by Qdrant.
 
-**What it does:**
+```mermaid
+graph LR
+    subgraph SESSION["🗂️ During This Conversation"]
+        CHAT["Patient types messages"]
+        HIST["In-memory session history — per session_id"]
+        CHAT --> HIST
+    end
 
-- Input: free-form clinical notes (e.g. *"Hair Transplant 2600 grafts, PRP 3 sessions, CBC test, Metformin 500mg twice daily"*)
-- Aadhya **parses and extracts**: services, medications/products, and lab tests mentioned
-- Each item is **verified against the live database**:
-  - Services → `service_onboarding_details` (service ID returned)
-  - Products → `product` catalogue (product ID, MRP, and discounted price returned)
-  - Lab Tests → `diagnostic_services` (test ID and price returned)
-- Outputs **Plan A** (primary treatment), **Plan B** (alternative), **Plan C** (medications/tests) — or however many plans the notes imply
-- Each item shows: name, database ID, verification status (`verified` / `not_found`), dosage, frequency, and cost
-- Items not found in DB are still included but clearly **flagged as unverified**
-- Output is clean JSON — no markdown, no extra text
+    subgraph SAVE["💾 Saving Memories — runs in background"]
+        HIST -->|"After response is sent"| MEM0["Mem0 Library"]
+        MEM0 -->|"Summarise key facts"| GPT["Azure GPT-4o-mini"]
+        GPT -->|"Create vector"| ADA["Azure text-embedding-ada-002"]
+        ADA -->|"Store vector"| QDRANT["Qdrant Vector Store\n./qdrant_storage"]
+        MEM0 -->|"Log change"| SQLITE["SQLite History DB\nlogs/mem0_history.db"]
+    end
 
-**Testable scenarios:**
+    subgraph RECALL["🔍 Recalling Memories — Next Session"]
+        QUERY["New message arrives"]
+        QUERY -->|"Search query"| MEM0_S["Mem0 Search"]
+        MEM0_S -->|"Embed query"| ADA2["Azure text-embedding-ada-002"]
+        ADA2 -->|"Find similar vectors"| QDRANT2["Qdrant Vector Store"]
+        QDRANT2 -->|"Top 5 memories"| CONTEXT["Injected into agent context"]
+        CONTEXT --> ANSWER["Agent answers with past context"]
+    end
 
-| # | Input | Expected Output |
-|---|---|---|
-| T1 | Notes with a known service (e.g. "Laser Hair Removal") | `verified: true`, service_onboarding_id returned |
-| T2 | Notes with an unknown service | `verified: false`, still included with name |
-| T3 | Notes with a product/medication | Product ID, MRP, discount price returned |
-| T4 | Notes with a lab test (e.g. "CBC") | diagnosis_id and price returned |
-| T5 | Notes with multiple treatments | Multiple plans generated (A, B, C…) |
-| T6 | Notes with only one treatment plan | Single plan returned, not forced to 3 |
+    QDRANT -.->|"persists to disk"| QDRANT2
 
----
+    style SESSION fill:#e3f2fd,stroke:#1565C0
+    style SAVE fill:#f3e5f5,stroke:#7B1FA2
+    style RECALL fill:#e8f5e9,stroke:#2e7d32
+```
 
-## 6. ✅ Product & Prescription Validation
+### Memory Scoping — No Cross-Contamination
 
-When a patient wants to purchase a product, the system checks if they have a valid prescription for it.
+Each memory is tagged with `scope:user_id:session_id` so Patient A's memories never reach Patient B, and each session is completely isolated.
 
-**What it does:**
+```mermaid
+graph TD
+    subgraph NAMESPACE["Memory Namespace Design — strict isolation"]
+        M1["orch:patient_001:session_abc — Patient 1, Session A"]
+        M2["orch:patient_001:session_xyz — Patient 1, Session B"]
+        M3["orch:patient_002:session_def — Patient 2, Session A"]
+        M4["booking:patient_001:session_abc — Booking scope, Patient 1"]
+    end
 
-- Takes a list of **product names** and an uploaded **prescription file**
-- Reads the prescription document (PDF or image) and extracts the medication names listed
-- Checks each product against what's in the prescription → returns `can_take: true/false` per product
-- Also checks the database `rx_required` flag — if the product needs a prescription and none is provided, it is flagged
-- Returns structured JSON — the frontend can use this to block or allow checkout
-
-**Testable scenarios:**
-
-| # | Input | Expected Output |
-|---|---|---|
-| T1 | Product present in the uploaded prescription | `can_take: true` |
-| T2 | Product NOT in the prescription | `can_take: false` |
-| T3 | Product with `rx_required = true`, no prescription uploaded | Flagged as not authorised |
-| T4 | Product with `rx_required = false` | Allowed regardless of prescription |
-| T5 | Multiple products, some matching, some not | Per-product `can_take` in response |
-
----
-
-## 7. 🌟 Personalised Recommendations
-
-Aadhya proactively recommends services and products tailored to each patient's profile and history.
-
-**What it does:**
-
-- Pulls the patient's **demographic profile** (age, gender) and matches it to age/gender-appropriate services
-- Reviews the patient's full **booking history** — past services and consultation summaries
-- Reviews all **uploaded documents** — lab reports, prescriptions, treatment history
-- Recommends:
-  - **Services** — complementary treatments, maintenance sessions, new services relevant to their history
-  - **Products** — products that support their treatment or documented health profile
-- Each recommendation includes a **reason** and a **priority level** (high / medium / low)
-
-**Testable scenarios:**
-
-| # | Scenario | Expected Output |
-|---|---|---|
-| T1 | Patient who had Botox → request recommendations | Suggests Botox touch-up, complementary skin services |
-| T2 | Female patient profile | Gender-appropriate services returned |
-| T3 | Patient with uploaded lab showing high cholesterol | Relevant health-aware recommendations |
-
-### 7a. Skin Profile Product Recommendations
-
-- Accepts AI skin assessment scores (acne severity, redness, pigmentation, hydration, skin type, concerns/constraints)
-- Matches to **pre-configured skin profiles** in the database
-- Returns the **top 3 matching products** with reasons
-
-**Testable scenarios:**
-
-| # | Input | Expected Output |
-|---|---|---|
-| T1 | Oily skin + moderate acne + low budget | Top 3 products matching all three filters |
-| T2 | Dry-sensitive skin + pigmentation concern | Products relevant to pigmentation + hydration |
+    M1 -.->|"Never mixes"| M3
+    M2 -.->|"Never mixes"| M3
+    M1 -.->|"Separate scope"| M4
+```
 
 ---
 
-## 8. 👨‍⚕️ Doctor–Patient Overview (Doctor Tool)
+## 4. Feature: General Chat — Ask Anything
 
-Doctors can ask questions about any specific patient in plain language and get real, data-backed answers.
+A patient or doctor types a question in plain language. Aadhya searches the right sources in the right order and returns a factual, real-time answer.
 
-**What it does:**
+```mermaid
+flowchart TD
+    Q["💬 User Question\ne.g. Find a dermatologist in Chennai"]
+    
+    Q --> DB_FIRST["1️⃣ Search Database FIRST — mandatory for clinic-specific info"]
+    
+    DB_FIRST --> MCP_CALL["🔌 MCP Server receives call"]
+    MCP_CALL --> SQL["🗄️ SQL Query executes\nSELECT id, full_name, specialty FROM doctor_details\nWHERE city ILIKE '%Chennai%'\nAND specialty ILIKE '%Dermatologist%'\nLIMIT 10"]
+    SQL --> PG["PostgreSQL"]
+    PG -->|"Returns rows"| FORMAT["Format results"]
+    FORMAT -->|"Found doctors"| ANSWER["✅ Answer with real data — never hallucinate"]
+    PG -->|"No results"| KNOWLEDGE{"Is it a general medical question?"}
 
-- All queries are **strictly locked to one patient** — doctor provides patient ID, no other patient's data is ever returned
-- Doctor asks natural language questions: *"What allergies does this patient have?"*, *"What was discussed last time?"*
-- Aadhya searches across all sources: **patient profile, all past consultations, and all uploaded file summaries**
-- Answers are written as **natural clinical prose** — no raw DB output, no technical jargon
-- Patient UUIDs and internal system IDs are **never revealed**, even if asked
+    KNOWLEDGE -->|"Yes"| RAG["2️⃣ Search RAG Knowledge Base\nMedical PDFs in ChromaDB"]
+    KNOWLEDGE -->|"No — clinic-specific"| NOT_FOUND["Could not find details in our records"]
+    
+    RAG --> CHROMA["ChromaDB vector search\nAesthetic and medical PDF library"]
+    CHROMA -->|"Found"| RAG_ANS["Answer from knowledge base"]
+    CHROMA -->|"Not found"| INTERNET["3️⃣ Internet Search — last resort only"]
+    INTERNET --> WEB_ANS["Answer from web research"]
 
-**Testable scenarios:**
+    ANSWER --> MASK["🔒 PII Masking applied"]
+    RAG_ANS --> MASK
+    WEB_ANS --> MASK
+    NOT_FOUND --> MASK
+    MASK --> RESP["Final Response to User"]
 
-| # | Scenario | Expected Output |
+    style ANSWER fill:#c8e6c9,stroke:#2e7d32
+    style NOT_FOUND fill:#fff9c4,stroke:#f9a825
+    style MASK fill:#fce4ec,stroke:#c62828
+```
+
+### Patient Mode vs Doctor Mode
+
+| | **AADHYA (Patient Mode)** | **Doctor Mode** |
 |---|---|---|
-| T1 | Ask about valid patient's allergies | Returns allergies from profile + consultation notes |
-| T2 | Ask about an invalid patient ID | "No patient found" — no data returned |
-| T3 | Ask for patient's internal UUID | Politely declined — privacy guard active |
-| T4 | Ask about a different patient mid-session | Remains locked to original patient_id |
-| T5 | Ask about documents uploaded by patient | Lists file summaries for that patient only |
+| **Persona** | Friendly, warm, encouraging | Professional, clinical, evidence-based |
+| **Greeting** | "Hi, I'm AADHYA, your aesthetics assistant!" | Addresses doctor by name |
+| **Language** | Simple, easy to understand | Medical terminology embraced |
+| **Booking push** | Actively encourages booking | No booking push needed |
 
 ---
 
-## 9. 🔒 Safety, Privacy & Memory
+## 5. Feature: File Upload & Document Processing
 
-| Feature | What it does | How to test |
-|---|---|---|
-| **PII Masking** | Emails and phone numbers in AI responses are masked automatically | Include PII in a DB record → verify response masks it |
-| **Healthcare Guard** | Security validation layer blocks non-healthcare queries (configurable) | Send a cooking recipe question → should be rejected |
-| **Anti-Jailbreak** | Patient Overview agent blocks attempts to extract system info or IDs | Ask for patient's UUID → declined with privacy message |
-| **Long-Term Memory** | Aadhya remembers past sessions per patient via Mem0 vector memory | Ask about something from a previous session → recalled correctly |
-| **In-Session Context** | Full chat history maintained within a session | Refer to an earlier answer → Aadhya knows it |
-| **Concurrent Users** | Thread-safe — unlimited simultaneous users with per-request isolation | Run parallel requests — no data cross-contamination |
+Patients upload medical files (PDFs or images). Aadhya reads, classifies, verifies, and stores them with a full AI summary.
+
+```mermaid
+flowchart TD
+    UPLOAD["📎 File Uploaded — PDF or Image"]
+    
+    UPLOAD --> DOWNLOAD["Download file from Cloud Storage URL"]
+    DOWNLOAD --> DETECT{"🔍 Step 1: Healthcare Detection\n120+ keyword scan"}
+    
+    DETECT -->|"No healthcare keywords found"| REJECT["❌ Rejected instantly\nThis does not appear to be a healthcare document\nZero AI cost — no LLM call made"]
+    
+    DETECT -->|"Healthcare keywords found"| EXTRACT{"📄 How to read this file?"}
+    
+    EXTRACT -->|"Typed PDF"| TEXT["Extract text directly — PyPDF2"]
+    EXTRACT -->|"Scanned or Image PDF"| OCR["🔍 Run OCR — pytesseract"]
+    EXTRACT -->|"Image JPG or PNG"| VISION["👁️ AI Vision — GPT-4o reads image"]
+    
+    TEXT --> CLASSIFY
+    OCR --> CLASSIFY
+    VISION --> CLASSIFY
+    
+    CLASSIFY["🏷️ Step 2: Classify Document Type — AI identifies one of 5 categories"]
+    CLASSIFY --> TYPES{"Document Type"}
+    TYPES --> T1["prescription"]
+    TYPES --> T2["lab_report"]
+    TYPES --> T3["diagnosis"]
+    TYPES --> T4["medical_history"]
+    TYPES --> T5["general"]
+
+    T1 --> VERIFY_STEP
+    T2 --> VERIFY_STEP
+    T3 --> VERIFY_STEP
+    T4 --> VERIFY_STEP
+    T5 --> VERIFY_STEP
+
+    VERIFY_STEP{"Was report_type sent in request?"}
+    VERIFY_STEP -->|"Yes"| VALID_AGENT["✅ Validation Agent checks\nDoes uploaded doc match expected type?\nblood report vs lab_report returns true"]
+    VERIFY_STEP -->|"No"| SKIP_VERIFY["Skip verification — only doc_type returned"]
+    
+    VALID_AGENT --> IS_VERIFIED["Returns is_verified: true or false"]
+    
+    IS_VERIFIED --> NAME_CHECK
+    SKIP_VERIFY --> NAME_CHECK
+    
+    NAME_CHECK["👤 Step 3: Patient Name Verification\nMCP calls SQL: SELECT first_name FROM patient_profile WHERE user_id = X\nCompares with name found inside document"]
+    NAME_CHECK --> NAME_RESULT["Returns name_verified: true or false"]
+    
+    NAME_RESULT --> SUMMARY["🧠 Step 4: AI Summary Generation\nGPT-4o-mini creates structured summary with sections:\nHospital + Patient Profile\nMedical Findings\nTreatments and Medications\nLab Values Table"]
+    
+    SUMMARY --> EMBED["Generate Vector Embedding\nAzure Ada-002 — 1536-dimensional vector"]
+    
+    EMBED --> SAVE["💾 Save to PostgreSQL\nfile_summaries table — summary and embeddings stored"]
+    
+    SAVE --> RESPONSE["📤 API Response\ndoc_type, is_verified, name_verified, summary"]
+
+    style REJECT fill:#ffcdd2,stroke:#c62828
+    style RESPONSE fill:#c8e6c9,stroke:#2e7d32
+```
 
 ---
 
-## ✅ Feature Completion Summary
+## 6. Feature: Pre-Consultation Chat
 
-| # | Feature | Status |
-|---|---|---|
-| 1 | General Chat — Patient Mode (AADHYA) | ✅ Complete |
-| 2 | General Chat — Doctor Mode | ✅ Complete |
-| 3 | File Upload — Healthcare Detection (Keyword) | ✅ Complete |
-| 4 | File Upload — Report Type Identification | ✅ Complete |
-| 5 | File Upload — Report Type Verification (vs. expected type) | ✅ Complete |
-| 6 | File Upload — Patient Name Verification | ✅ Complete |
-| 7 | File Upload — PDF Text Extraction & AI Summary | ✅ Complete |
-| 8 | File Upload — Scanned PDF OCR + Summary | ✅ Complete |
-| 9 | File Upload — Image (Vision AI) + Summary | ✅ Complete |
-| 10 | Pre-Consultation Chat (MCQ + Text) | ✅ Complete |
-| 11 | Pre-Consultation Clinical Summary (Narrative) | ✅ Complete |
-| 12 | Follow-Up Care Chat | ✅ Complete |
-| 13 | Treatment Planner — Services Verification | ✅ Complete |
-| 14 | Treatment Planner — Products + Pricing Verification | ✅ Complete |
-| 15 | Treatment Planner — Lab Tests Verification | ✅ Complete |
-| 16 | Product & Prescription Validation (can_take) | ✅ Complete |
-| 17 | Personalised Service & Product Recommendations | ✅ Complete |
-| 18 | Skin Profile Product Recommendations | ✅ Complete |
-| 19 | Doctor–Patient Overview Chatbot | ✅ Complete |
-| 20 | Long-Term Memory (Mem0) | ✅ Complete |
-| 21 | PII Masking & Privacy | ✅ Complete |
+Before a patient's appointment, Aadhya acts like a smart nurse — gathering all the information the doctor needs through natural conversation.
+
+```mermaid
+sequenceDiagram
+    participant P as 👤 Patient
+    participant API as ⚡ FastAPI
+    participant CREW as 🤖 Booking Agent
+    participant MCP as 🔌 MCP Server
+    participant DB as 🗄️ PostgreSQL
+    participant MEM as 🧠 Session Memory
+
+    P->>API: POST /orch with slot_id: abc123
+    API->>MCP: Fetch booking details for slot_id
+    MCP->>DB: SELECT service_name, slot_date FROM patient_booked_slot WHERE id = abc123
+    DB-->>MCP: service: Botox, date: 15 Mar 2026
+    MCP-->>API: Booking context returned
+    
+    API->>CREW: Start intake chat with booking context
+    CREW-->>P: Hi! I see you have a Botox appointment on 15 March. What brings you in today?
+
+    loop Conversation turns until all areas are covered
+        P->>API: input message — e.g. I have persistent forehead lines
+        API->>MEM: Retrieve session history
+        MEM-->>API: Previous messages
+        API->>CREW: Answer plus full history
+        CREW-->>P: Next contextual question — MCQ or open text
+        API->>MEM: Save this turn to history
+    end
+
+    Note over CREW: All areas covered\nChief complaint done\nPersonal history done\nFamily history done\nMedications done\nAllergies done\nLifestyle done
+
+    CREW->>CREW: Generate narrative clinical summary
+    Note over CREW: Priya Sharma, 26, presents with persistent\nforehead lines affecting confidence for 2 years...
+    
+    CREW->>MCP: Save summary to DB
+    MCP->>DB: UPDATE patient_booked_slot SET summary = ... WHERE id = abc123
+    CREW-->>P: status: end — summary saved
+```
 
 ---
 
-*Document version: March 2026 · Aadhya AI System*
+## 7. Feature: Follow-Up Care Chat
+
+After a patient completes treatment, Aadhya automatically checks in with treatment-specific questions.
+
+```mermaid
+flowchart TD
+    TRIGGER["🔔 Follow-Up Triggered\nfollowUp: true, slot_id, consultationDate, followupDate"]
+
+    TRIGGER --> FETCH["🔌 MCP fetches slot details\nSELECT service_name, summary FROM patient_booked_slot WHERE id = slot_id"]
+
+    FETCH --> SERVICE{"Which treatment was done?"}
+    SERVICE -->|"Botox"| BOT_Q["Questions about:\nResult satisfaction\nSide effects — bruising, swelling\nDuration of effect\nNeed for touch-up\nNatural appearance achieved"]
+    SERVICE -->|"Hair Transplant"| HAIR_Q["Questions about:\nNew hair growth observed\nScalp health and healing\nItching or infection signs\nProgress vs expectations\nNext PRP session needed"]
+    SERVICE -->|"Laser Treatment"| LASER_Q["Questions about:\nSkin sensitivity post-laser\nPigmentation changes\nSPF routine follow-through\nSession results satisfaction"]
+    SERVICE -->|"Any other service"| GEN_Q["General outcome questions based on procedure"]
+
+    BOT_Q --> CHAT["💬 Multi-turn conversation\nPatient answers naturally\nAadhya remembers all previous answers\nin this follow-up session"]
+    HAIR_Q --> CHAT
+    LASER_Q --> CHAT
+    GEN_Q --> CHAT
+
+    CHAT --> SAVE["💾 Save all responses to DB for doctor review"]
+    SAVE --> DONE["✅ Follow-up complete"]
+
+    style DONE fill:#c8e6c9,stroke:#2e7d32
+```
+
+---
+
+## 8. Feature: Treatment Planner — Doctor Tool
+
+A doctor types free-form notes after a consultation. Aadhya converts them into a fully verified, structured treatment plan with real database IDs and pricing.
+
+```mermaid
+flowchart TD
+    NOTES["📝 Doctor Free-Form Notes\nHair Transplant 2600 grafts, PRP 3 sessions,\nCBC test, Metformin 500mg twice daily"]
+
+    NOTES --> PARSE["🤖 Treatment Planner Agent\nStep 1: Parse and identify all items"]
+    PARSE --> ITEMS{"Categorise each item"}
+    
+    ITEMS -->|"Services"| SVC_VERIFY["🔌 MCP to PostgreSQL\nSELECT id AS service_onboarding_id, service_name\nFROM service_onboarding_details\nWHERE service_name ILIKE '%Hair Transplant%'\nLIMIT 5"]
+    
+    ITEMS -->|"Products or Medications"| PROD_VERIFY["🔌 MCP to PostgreSQL\nSELECT id, product_name, product_price, discount_price\nFROM product\nWHERE product_name ILIKE '%Metformin%'\nLIMIT 5"]
+    
+    ITEMS -->|"Lab Tests"| LAB_VERIFY["🔌 MCP to PostgreSQL\nSELECT id AS diagnosis_id, test_name, price\nFROM diagnostic_services\nWHERE test_name ILIKE '%CBC%'\nLIMIT 5"]
+
+    SVC_VERIFY -->|"Found in DB"| SVC_OK["✅ verified: true — service_onboarding_id returned"]
+    SVC_VERIFY -->|"Not in DB"| SVC_MISS["⚠️ verified: false — still included, clearly flagged"]
+
+    PROD_VERIFY -->|"Found"| PROD_OK["✅ verified: true — product_id, MRP_cost, cost returned"]
+    PROD_VERIFY -->|"Not in DB"| PROD_MISS["⚠️ verified: false — still included, clearly flagged"]
+
+    LAB_VERIFY -->|"Found"| LAB_OK["✅ verified: true — diagnosis_id, price returned"]
+    LAB_VERIFY -->|"Not in DB"| LAB_MISS["⚠️ verified: false — still included, clearly flagged"]
+
+    SVC_OK --> STRUCTURE
+    SVC_MISS --> STRUCTURE
+    PROD_OK --> STRUCTURE
+    PROD_MISS --> STRUCTURE
+    LAB_OK --> STRUCTURE
+    LAB_MISS --> STRUCTURE
+
+    STRUCTURE["📋 Step 2: Structure into Plans — as many as notes imply"]
+    
+    STRUCTURE --> PLAN_A["Plan A — Primary Treatment\nHair Transplant 2600 grafts\nservice_onboarding_id: abc\nverified: true"]
+    STRUCTURE --> PLAN_B["Plan B — Alternative\nPRP 3 Sessions\nservice_onboarding_id: xyz\nverified: true"]
+    STRUCTURE --> PLAN_C["Plan C — Medications and Tests\nMetformin 500mg BD — product_id, MRP, cost\nCBC — diagnosis_id, price"]
+
+    PLAN_A --> JSON_OUT["📤 Pure JSON output — no markdown, no extra text"]
+    PLAN_B --> JSON_OUT
+    PLAN_C --> JSON_OUT
+
+    style SVC_OK fill:#c8e6c9,stroke:#2e7d32
+    style PROD_OK fill:#c8e6c9,stroke:#2e7d32
+    style LAB_OK fill:#c8e6c9,stroke:#2e7d32
+    style SVC_MISS fill:#fff9c4,stroke:#f9a825
+    style PROD_MISS fill:#fff9c4,stroke:#f9a825
+    style LAB_MISS fill:#fff9c4,stroke:#f9a825
+    style JSON_OUT fill:#c8e6c9,stroke:#2e7d32
+```
+
+---
+
+## 9. Feature: Product & Prescription Validation
+
+When a patient wants to buy a product, the system checks their uploaded prescription to verify they are authorised to take it.
+
+```mermaid
+flowchart TD
+    REQ["📋 Request\nproducts: Metformin, Vitamin D\nfile_urls: prescription.pdf\nvalidation: true"]
+
+    REQ --> FILE_READ["📄 File Processor reads prescription\nPDF text or Vision AI"]
+    FILE_READ --> EXTRACT["Extract medication list from document"]
+
+    EXTRACT --> PER_PRODUCT{"For each product requested"}
+
+    PER_PRODUCT --> CHECK_PRES{"Is product name in prescription text?"}
+    CHECK_PRES -->|"Yes"| DB_CHECK["🔌 MCP to PostgreSQL\nSELECT rx_required FROM product\nWHERE product_name ILIKE '%Metformin%'"]
+    CHECK_PRES -->|"No"| CAN_TAKE_F["can_take: false — not prescribed"]
+    
+    DB_CHECK -->|"rx_required = false"| CAN_TAKE_T["can_take: true — no prescription needed"]
+    DB_CHECK -->|"rx_required = true and in prescription"| CAN_TAKE_T2["can_take: true — prescribed and authorised"]
+    DB_CHECK -->|"rx_required = true and NOT in prescription"| CAN_TAKE_F2["can_take: false — prescription required but not found"]
+
+    CAN_TAKE_T --> RESP["📤 Per-product JSON response\nMetformin: can_take true\nVitamin D: can_take true"]
+    CAN_TAKE_T2 --> RESP
+    CAN_TAKE_F --> RESP
+    CAN_TAKE_F2 --> RESP
+
+    style CAN_TAKE_T fill:#c8e6c9,stroke:#2e7d32
+    style CAN_TAKE_T2 fill:#c8e6c9,stroke:#2e7d32
+    style CAN_TAKE_F fill:#ffcdd2,stroke:#c62828
+    style CAN_TAKE_F2 fill:#ffcdd2,stroke:#c62828
+```
+
+---
+
+## 10. Feature: Personalised Recommendations
+
+Aadhya proactively recommends services and products tailored to each patient's complete history.
+
+```mermaid
+flowchart TD
+    TRIGGER["⭐ recommendations: true — user_id: patient_001"]
+
+    subgraph DATA_PULL["📊 Pull All Patient Data"]
+        DEMO["🔌 MCP to patient_profile\nSELECT gender, date_of_birth WHERE id = patient_001"]
+        HISTORY["🔌 MCP to patient_booked_slot\nSELECT service_name, summary\nWHERE patient_id = patient_001 ORDER BY slot_date DESC LIMIT 10"]
+        FILES["🔌 MCP to file_summaries\nSELECT summary WHERE user_id = patient_001 LIMIT 10"]
+    end
+
+    TRIGGER --> DEMO
+    TRIGGER --> HISTORY
+    TRIGGER --> FILES
+
+    DEMO --> ANALYSE
+    HISTORY --> ANALYSE
+    FILES --> ANALYSE
+
+    ANALYSE["🤖 Recommendation Agent — analyses all data together"]
+
+    ANALYSE --> SVC_MATCH["Match to services catalogue\nBased on: gender, past services, clinical notes"]
+    ANALYSE --> PROD_MATCH["Match to products catalogue\nBased on: treatment history and health conditions"]
+
+    SVC_MATCH --> SVC_RECS["📋 Service Recommendations\nBotox touch-up — high priority\nChemical Peel — medium priority"]
+    PROD_MATCH --> PROD_RECS["💊 Product Recommendations\nSPF 50 sunscreen — reason: post-laser\nVitamin C serum — reason: pigmentation"]
+
+    SVC_RECS --> OUT["📤 JSON with service and product recommendations\neach with reason and priority level"]
+    PROD_RECS --> OUT
+
+    style OUT fill:#c8e6c9,stroke:#2e7d32
+```
+
+### 10a. Skin Profile Product Recommendations
+
+```mermaid
+flowchart TD
+    SKIN_IN["🧴 skinValues free-form text input\noily skin, moderate acne, low budget, no fragrance"]
+    
+    SKIN_IN --> PARSE_SKIN["🤖 Skin Profile Agent — parse the text"]
+    PARSE_SKIN --> EXTRACT_FIELDS["Extract structured fields\nai_skin_type: oily\nai_acne_severity: 3-moderate\nuser_constraints: no-fragrance, low-budget\nuser_concern: acne, oil-control"]
+
+    EXTRACT_FIELDS --> BUILD_SQL["Build targeted SQL query\nSELECT recommended_products FROM skin_profiles\nWHERE ai_skin_type ILIKE '%oily%'\nAND ai_acne_severity ILIKE '%moderate%'\nAND user_concern ILIKE '%acne%'\nLIMIT 5"]
+
+    BUILD_SQL --> MCP_CALL["🔌 MCP Server to PostgreSQL"]
+    MCP_CALL --> RESULTS["Matching skin profile rows returned"]
+    RESULTS --> TOP3["📤 Top 3 matching products with reasons"]
+
+    style TOP3 fill:#c8e6c9,stroke:#2e7d32
+```
+
+---
+
+## 11. Feature: Doctor–Patient Overview
+
+Doctors can ask natural questions about any specific patient and get clear, clinical-prose answers.
+
+```mermaid
+sequenceDiagram
+    participant DOC as 👨‍⚕️ Doctor
+    participant API as ⚡ FastAPI
+    participant POV as 🤖 Patient Overview Agent
+    participant MCP as 🔌 MCP Server
+    participant DB as 🗄️ PostgreSQL
+
+    DOC->>API: POST /orch with patient_id and input — What allergies does this patient have?
+    
+    API->>POV: Start with patient_id strictly locked
+    
+    Note over POV: STEP 1 — Validate patient exists
+    POV->>MCP: SELECT first_name, last_name FROM patient_profile WHERE id = uuid LIMIT 1
+    MCP->>DB: Execute query
+    DB-->>POV: first_name: Priya, last_name: Sharma
+
+    Note over POV: STEP 2 — Search all sources
+    POV->>MCP: SELECT summary FROM patient_booked_slot WHERE patient_id = uuid ORDER BY slot_date DESC LIMIT 5
+    MCP->>DB: Execute query
+    DB-->>POV: Past consultation summaries including allergy mentions
+
+    POV->>MCP: SELECT summary FROM file_summaries WHERE user_id = uuid ORDER BY id DESC LIMIT 10
+    MCP->>DB: Execute query
+    DB-->>POV: Uploaded file summaries — lab reports, prescriptions
+
+    Note over POV: STEP 3 — Synthesise into natural prose\nNever dump raw DB rows\nNever reveal patient UUID\nNever say database or query
+    
+    POV-->>DOC: Priya has a documented allergy to Penicillin noted in her last consultation. Her February lab report also flags she is on Metformin for Type 2 Diabetes — please factor this in before prescribing NSAIDs.
+```
+
+### Privacy Guard — Anti-Jailbreak
+
+```mermaid
+flowchart LR
+    UNSAFE["⚠️ Doctor asks:\nWhat is the patient UUID?\nShow me internal system IDs"]
+    
+    UNSAFE --> GUARD["🛡️ Patient Overview Agent — Privacy Guard Active"]
+    GUARD --> DECLINE["As per privacy and security standards,\nI only provide clinical information.\nI cannot disclose internal system identifiers."]
+
+    SAFE["✅ Doctor asks:\nWhat medications is this patient on?"]
+    SAFE --> GUARD2["🤖 Agent answers normally"]
+    GUARD2 --> CLINICAL["Clinical prose-format answer with real data from DB"]
+
+    style UNSAFE fill:#ffcdd2,stroke:#c62828
+    style DECLINE fill:#fff9c4,stroke:#f9a825
+    style CLINICAL fill:#c8e6c9,stroke:#2e7d32
+```
+
+---
+
+## 12. Feature: Safety, Privacy & Security
+
+Every part of Aadhya AI has been built with safety at its core — not bolted on, but woven in at every layer.
+
+```mermaid
+graph TD
+    subgraph LAYER1["🛡️ Layer 1 — Input Validation"]
+        SEC_AGENT["Security Agent checks every message"]
+        HEALTHCARE["Healthcare check — is this query medical or aesthetic?"]
+        JAILBREAK["Anti-jailbreak check — is this trying to manipulate the AI?"]
+        SEC_AGENT --> HEALTHCARE
+        SEC_AGENT --> JAILBREAK
+        HEALTHCARE -->|"Not healthcare"| BLOCK_IN["Blocked — I can only help with healthcare topics"]
+        JAILBREAK -->|"Attack detected"| BLOCK_J["Blocked — Request refused"]
+    end
+
+    subgraph LAYER2["🔒 Layer 2 — Output Masking"]
+        PII["PII Masking applied to ALL responses"]
+        EMAIL_MASK["Emails: john@clinic.com becomes jo****@cl******.com"]
+        PHONE_MASK["Phones: 9876543210 becomes 98******"]
+        DOB_MASK["Dates of birth: Oct 22, 1992 becomes Oct **, ****"]
+        PII --> EMAIL_MASK
+        PII --> PHONE_MASK
+        PII --> DOB_MASK
+    end
+
+    subgraph LAYER3["🔐 Layer 3 — Data Access Control"]
+        PATIENT_LOCK["Patient ID Lock — every query must include WHERE patient_id = id"]
+        NO_UUID["UUID Shield — internal system IDs are NEVER shown to users"]
+        PRIVACY_GUARD["Anti-jailbreak guard in Patient Overview Agent"]
+    end
+
+    subgraph LAYER4["⚡ Layer 4 — Concurrency Safety"]
+        THREAD_SAFE["Thread-Safe Session Management — RLocks protect all shared dictionaries"]
+        PER_REQ["Per-Request Crew Isolation — each API call gets its own agent crew"]
+        POOL_INFO["Connection Pool — PostgreSQL max 10, Thread pool max 50 workers"]
+    end
+
+    subgraph LAYER5["🗄️ Layer 5 — Database Safety"]
+        SQL_GUARD["SELECT only — AI agents cannot INSERT, UPDATE or DELETE"]
+        LIMIT_RULE["LIMIT on all queries — prevents bulk data dumps"]
+        NO_EMBED["Embedding columns never selected — saves cost and bandwidth"]
+    end
+
+    LAYER1 --> LAYER2
+    LAYER2 --> LAYER3
+    LAYER3 --> LAYER4
+    LAYER4 --> LAYER5
+
+    style BLOCK_IN fill:#ffcdd2,stroke:#c62828
+    style BLOCK_J fill:#ffcdd2,stroke:#c62828
+    style LAYER1 fill:#fce4ec,stroke:#c62828
+    style LAYER2 fill:#e8eaf6,stroke:#3F51B5
+    style LAYER3 fill:#e0f2f1,stroke:#00796B
+    style LAYER4 fill:#fff8e1,stroke:#F57F17
+    style LAYER5 fill:#e8f5e9,stroke:#388E3C
+```
+
+---
+
+## 13. What Has Been Built — Feature Completion
+
+Every feature listed below is **live, tested, and production-ready** as of March 2026.
+
+| # | Feature | Status | What It Does |
+|---|---|---|---|
+| 1 | General Chat — Patient Mode | ✅ Live | AADHYA persona, DB search, RAG fallback, Mem0 memory |
+| 2 | General Chat — Doctor Mode | ✅ Live | Professional persona, clinical depth, multi-source search |
+| 3 | Healthcare Detection | ✅ Live | 120+ keyword filter — blocks non-medical uploads instantly at zero AI cost |
+| 4 | Report Type Identification | ✅ Live | AI classifies into 5 document categories automatically |
+| 5 | Report Type Verification | ✅ Live | Validates that the uploaded document matches the caller's expected report type |
+| 6 | Patient Name Verification | ✅ Live | Prevents submitting someone else's reports using DB name match |
+| 7 | PDF Text Extraction + Summary | ✅ Live | Full structured AI summary saved with vector embeddings to DB |
+| 8 | Scanned PDF OCR + Summary | ✅ Live | OCR via pytesseract reads handwritten or scanned documents |
+| 9 | Image Vision + Summary | ✅ Live | GPT-4o Vision reads image-only medical files |
+| 10 | Pre-Consultation Chat | ✅ Live | Smart nurse intake — all key clinical areas covered naturally |
+| 11 | Clinical Summary Generation | ✅ Live | Narrative prose summary saved to appointment record |
+| 12 | Follow-Up Care Chat | ✅ Live | Treatment-specific post-care questions with multi-turn memory |
+| 13 | Treatment Planner — Services | ✅ Live | Verifies services against DB, returns service_onboarding_id |
+| 14 | Treatment Planner — Products | ✅ Live | Verifies products, returns product_id, MRP, and discount price |
+| 15 | Treatment Planner — Lab Tests | ✅ Live | Verifies tests, returns diagnosis_id and price |
+| 16 | Prescription Validation | ✅ Live | Per-product can_take: true or false based on uploaded prescription |
+| 17 | Personalised Recommendations | ✅ Live | Services and products recommended based on full patient history |
+| 18 | Skin Profile Recommendations | ✅ Live | Top 3 products matched to AI-derived skin scores |
+| 19 | Patient Overview Chatbot | ✅ Live | Doctor asks questions in plain language, strictly locked to one patient |
+| 20 | Long-Term Memory — Mem0 | ✅ Live | Per-user vector memory backed by Qdrant, survives session restarts |
+| 21 | PII Masking and Privacy | ✅ Live | Auto-masks emails, phone numbers, and dates of birth in all responses |
+
+---
+
+> *Document prepared by the AI Engineering Team · DimensionLeap · March 2026*
+>
+> *All 21 features are production-ready and tested. Architecture follows enterprise standards for concurrency, privacy, and clinical safety.*
