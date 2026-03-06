@@ -31,60 +31,60 @@ Think of Aadhya AI as a smart hospital assistant that lives in the cloud. A pati
 
 ```mermaid
 graph TB
-    subgraph CLIENT["🌐 Client Layer"]
-        APP["📱 Mobile / Web App\n(Patient or Doctor)"]
+    subgraph CLIENT["Client Layer"]
+        APP["Mobile or Web App - Patient or Doctor"]
     end
 
-    subgraph API["⚡ API Gateway Layer"]
-        FAST["FastAPI Server\n(api_server.py)\nPort 8000"]
-        MASK["🔒 PII Masking\n(Emails & Phones auto-hidden)"]
-        POOL["🔗 Connection Pool\n(Up to 50 concurrent users)"]
+    subgraph API["API Gateway Layer"]
+        FAST["FastAPI Server - api_server.py - Port 8000"]
+        MASK["PII Masking - Emails and Phones auto-hidden"]
+        POOL["Connection Pool - Up to 50 concurrent users"]
     end
 
-    subgraph AGENTS["🤖 Agentic Intelligence Layer — CrewAI"]
-        ORCH["🧠 Orchestrator Agent\n(Decides who handles what)"]
-        SECURITY["🛡️ Security Agent\n(Validates all inputs)"]
-        QUERY["💬 Query Agent\n(Answers questions)"]
-        FILE["📄 File Processor Agent\n(Reads & summarises docs)"]
-        BOOKING["📅 Booking Agent\n(Pre-consultation chat)"]
-        MED["💊 Medication Agent\n(Safe medicine suggestions)"]
-        FOLLOWUP["🔄 Follow-Up Agent\n(Post-treatment check-ins)"]
-        TREATMENT["🩺 Treatment Planner Agent\n(Doctor's structured plans)"]
-        RECOMMEND["⭐ Recommendation Agent\n(Personalised suggestions)"]
-        PATIENT_OV["👨‍⚕️ Patient Overview Agent\n(Doctor's patient chatbot)"]
-        VALID["✅ Validation Agent\n(Document & prescription checks)"]
-        SKIN["🧴 Skin Profile Agent\n(Product matching by skin type)"]
+    subgraph AGENTS["Agentic Intelligence Layer - CrewAI"]
+        ORCH["Orchestrator Agent - Decides who handles what"]
+        SECURITY["Security Agent - Validates all inputs"]
+        QUERY["Query Agent - Answers questions"]
+        FILE["File Processor Agent - Reads and summarises docs"]
+        BOOKING["Booking Agent - Pre-consultation chat"]
+        MED["Medication Agent - Safe medicine suggestions"]
+        FOLLOWUP["Follow-Up Agent - Post-treatment check-ins"]
+        TREATMENT["Treatment Planner Agent - Doctor structured plans"]
+        RECOMMEND["Recommendation Agent - Personalised suggestions"]
+        PATIENT_OV["Patient Overview Agent - Doctor patient chatbot"]
+        VALID["Validation Agent - Document and prescription checks"]
+        SKIN["Skin Profile Agent - Product matching by skin type"]
     end
 
-    subgraph MCP["🔌 MCP Tool Server (Model Context Protocol)"]
-        MCP_SRV["MCP Server\n(server.py)\nBridges AI to Database"]
-        DB_TOOL["🗄️ run_query\n(execute SQL)"]
-        RAG_TOOL["🔍 rag_search\n(vector similarity)"]
-        FILE_TOOL["📎 file_search\n(uploaded docs)"]
+    subgraph MCP["MCP Tool Server - Model Context Protocol"]
+        MCP_SRV["MCP Server - server.py - Bridges AI to Database"]
+        DB_TOOL["run_query - execute SQL"]
+        RAG_TOOL["rag_search - vector similarity"]
+        FILE_TOOL["file_search - uploaded docs"]
     end
 
-    subgraph MEMORY["🧠 Memory Layer"]
-        MEM0["Mem0 Memory\n(Long-term per-user)"]
-        QDRANT["Qdrant Vector Store\n(Stores memory embeddings)"]
-        SQLITE_MEM["SQLite History DB\n(Memory change log)"]
+    subgraph MEMORY["Memory Layer - Mem0"]
+        MEM0["Mem0 Memory - Long-term per-user"]
+        QDRANT["Qdrant Vector Store - Stores memory embeddings"]
+        SQLITE_MEM["SQLite History DB - Memory change log"]
     end
 
-    subgraph RAG_KB["📚 Knowledge Base — RAG"]
-        CHROMA["ChromaDB\n(Medical PDF knowledge)"]
-        PDFSTORE["📁 PDF Documents\n(Aesthetics & Medical guides)"]
+    subgraph RAG_KB["Knowledge Base - RAG"]
+        CHROMA["ChromaDB - Medical PDF knowledge"]
+        PDFSTORE["PDF Documents - Aesthetics and Medical guides"]
     end
 
-    subgraph DB["🗄️ PostgreSQL Database"]
-        DOCTORS["doctor_details\ndoctor_clinic_details\ndoctor_service"]
-        PATIENTS["patient_profile\npatient_booked_slot\nfile_summaries"]
-        SERVICES["services\nservice_onboarding_details\ndiagnostic_services"]
-        PRODUCTS["product\nproduct_details\nskin_profiles"]
+    subgraph DB["PostgreSQL Database"]
+        DOCTORS["doctor_details - doctor_clinic_details - doctor_service"]
+        PATIENTS["patient_profile - patient_booked_slot - file_summaries"]
+        SERVICES["services - service_onboarding_details - diagnostic_services"]
+        PRODUCTS["product - product_details - skin_profiles"]
     end
 
-    subgraph AZURE["☁️ Azure OpenAI"]
-        GPT["GPT-4o-mini\n(LLM — reasoning)"]
-        EMBED["text-embedding-ada-002\n(Turns text into vectors)"]
-        VISION["GPT-4o Vision\n(Reads images & scanned docs)"]
+    subgraph AZURE["Azure OpenAI"]
+        GPT["GPT-4o-mini - LLM reasoning engine"]
+        EMBED["text-embedding-ada-002 - Turns text into vectors"]
+        VISION["GPT-4o Vision - Reads images and scanned docs"]
     end
 
     APP -->|"HTTPS POST /orch"| FAST
@@ -92,15 +92,15 @@ graph TB
     FAST --> POOL
     FAST --> ORCH
     ORCH --> SECURITY
-    SECURITY -->|"✅ Approved"| QUERY
-    SECURITY -->|"✅ Approved"| FILE
-    SECURITY -->|"✅ Approved"| BOOKING
-    SECURITY -->|"✅ Approved"| MED
-    SECURITY -->|"✅ Approved"| FOLLOWUP
-    SECURITY -->|"✅ Approved"| TREATMENT
-    SECURITY -->|"✅ Approved"| RECOMMEND
-    SECURITY -->|"✅ Approved"| PATIENT_OV
-    SECURITY -->|"✅ Approved"| SKIN
+    SECURITY -->|"Approved"| QUERY
+    SECURITY -->|"Approved"| FILE
+    SECURITY -->|"Approved"| BOOKING
+    SECURITY -->|"Approved"| MED
+    SECURITY -->|"Approved"| FOLLOWUP
+    SECURITY -->|"Approved"| TREATMENT
+    SECURITY -->|"Approved"| RECOMMEND
+    SECURITY -->|"Approved"| PATIENT_OV
+    SECURITY -->|"Approved"| SKIN
 
     QUERY --> MCP_SRV
     FILE --> MCP_SRV
@@ -122,13 +122,16 @@ graph TB
     RAG_TOOL --> PATIENTS
     RAG_TOOL --> CHROMA
 
-    ORCH <--> MEM0
+    ORCH --> MEM0
+    MEM0 --> ORCH
     MEM0 --> QDRANT
     MEM0 --> SQLITE_MEM
 
-    CHROMA <-- PDFSTORE
-    FAST <--> AZURE
-    MCP_SRV <--> AZURE
+    PDFSTORE --> CHROMA
+    FAST --> AZURE
+    AZURE --> FAST
+    MCP_SRV --> AZURE
+    AZURE --> MCP_SRV
     FILE_TOOL --> VISION
 
     style CLIENT fill:#e8f4fd,stroke:#2196F3
