@@ -1,5 +1,5 @@
 # 🏥 Aadhya AI — Complete System Architecture
-### *Built for DimensionLeap · March 2026*
+### *Built for AestheticQ · March 2026*
 
 ---
 
@@ -768,6 +768,6 @@ Every feature listed below is **live, tested, and production-ready** as of March
 
 ---
 
-> *Document prepared by the AI Engineering Team · DimensionLeap · March 2026*
+> *Document prepared by the AI Engineering Team · AestheticQ · March 2026*
 >
 > *All 21 features are production-ready and tested. Architecture follows enterprise standards for concurrency, privacy, and clinical safety.*
