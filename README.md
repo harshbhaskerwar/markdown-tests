@@ -9,7 +9,7 @@
 
 ## 📌 Table of Contents
 
-1. [The Big Picture — Cloud Architecture](#1-the-big-picture--cloud-architecture)
+1. [System Architecture Overview — Cloud Infrastructure & Deployment](#1-system-architecture-overview--cloud-infrastructure--deployment)
 2. [How Agents Talk to Each Other — Agentic Workflow](#2-how-agents-talk-to-each-other--agentic-workflow)
 3. [How Memory Works — Mem0](#3-how-memory-works--mem0)
 4. [Feature: General Chat (Ask Anything)](#4-feature-general-chat--ask-anything)
@@ -25,66 +25,66 @@
 
 ---
 
-## 1. The Big Picture — Cloud Architecture
+## 1. System Architecture Overview — Cloud Infrastructure & Deployment
 
-Think of Aadhya AI as a smart hospital assistant that lives in the cloud. A patient or doctor opens an app, types a question, and within seconds they get an intelligent, accurate answer. Behind the scenes, a sophisticated system of AI agents, databases, and memory services work together.
+Aadhya AI is a cloud-native, multi-agent healthcare intelligence platform. When a patient or doctor submits a query through the application, a layered system of AI agents, data services, and memory infrastructure processes it in real time — delivering accurate, personalised, and privacy-compliant responses within seconds. The architecture below illustrates how every component interconnects across the full request lifecycle.
 
 ```mermaid
 graph TB
-    subgraph CLIENT["Client Layer"]
-        APP["Mobile or Web App - Patient or Doctor"]
+    subgraph CLIENT["PATIENT  /  DOCTOR  —  Client Applications"]
+        APP["Web App or Mobile App\nPatient Portal and Doctor Dashboard"]
     end
 
-    subgraph API["API Gateway Layer"]
-        FAST["FastAPI Server - api_server.py - Port 8000"]
-        MASK["PII Masking - Emails and Phones auto-hidden"]
-        POOL["Connection Pool - Up to 50 concurrent users"]
+    subgraph API["API GATEWAY  —  FastAPI Service  |  Port 8000"]
+        FAST["Request Router\nReceives all incoming API calls\nand routes to the right agent crew"]
+        MASK["Privacy Guard\nAuto-masks emails, phone numbers\nand dates of birth in every response"]
+        POOL["Concurrency Engine\n50-thread executor pool\n10 PostgreSQL connections pooled"]
     end
 
-    subgraph AGENTS["Agentic Intelligence Layer - CrewAI"]
-        ORCH["Orchestrator Agent - Decides who handles what"]
-        SECURITY["Security Agent - Validates all inputs"]
-        QUERY["Query Agent - Answers questions"]
-        FILE["File Processor Agent - Reads and summarises docs"]
-        BOOKING["Booking Agent - Pre-consultation chat"]
-        MED["Medication Agent - Safe medicine suggestions"]
-        FOLLOWUP["Follow-Up Agent - Post-treatment check-ins"]
-        TREATMENT["Treatment Planner Agent - Doctor structured plans"]
-        RECOMMEND["Recommendation Agent - Personalised suggestions"]
-        PATIENT_OV["Patient Overview Agent - Doctor patient chatbot"]
-        VALID["Validation Agent - Document and prescription checks"]
-        SKIN["Skin Profile Agent - Product matching by skin type"]
+    subgraph AGENTS["AI AGENT LAYER  —  CrewAI Orchestration Framework"]
+        ORCH["Orchestrator\nReads all request flags and delegates\nto the correct specialist agent"]
+        SECURITY["Security Validator\nHealthcare relevance check\nAnti-jailbreak protection on every call"]
+        QUERY["Query Agent\nAnswers clinical and service queries\nSearches DB, then RAG, then Internet"]
+        FILE["File Processor\nExtracts text via OCR or Vision AI\nGenerates structured medical summaries"]
+        BOOKING["Pre-Consultation Agent\nSmart intake nurse conversation\nCovers history, medications, allergies"]
+        MED["Medication Agent\nSafe medicine information\nAllergy and interaction awareness"]
+        FOLLOWUP["Follow-Up Care Agent\nPost-treatment automated check-in\nTreatment-specific question sets"]
+        TREATMENT["Treatment Planner\nConverts doctor free-form notes into\nverified structured Plans A, B, C"]
+        RECOMMEND["Recommendation Engine\nPersonalised services and products\nbased on full patient history"]
+        PATIENT_OV["Patient Overview Agent\nDoctor-facing patient intelligence\nStrictly locked by patient ID"]
+        VALID["Validation Agent\nDocument type and name verification\nPrescription authorisation checks"]
+        SKIN["Skin Profile Engine\nMatches products to skin type\nand AI-derived severity scores"]
     end
 
-    subgraph MCP["MCP Tool Server - Model Context Protocol"]
-        MCP_SRV["MCP Server - server.py - Bridges AI to Database"]
-        DB_TOOL["run_query - execute SQL"]
-        RAG_TOOL["rag_search - vector similarity"]
-        FILE_TOOL["file_search - uploaded docs"]
+    subgraph MCP["MCP TOOL SERVER  —  Model Context Protocol Bridge"]
+        MCP_SRV["stdio JSON-RPC Server\nSecure bridge between AI agents\nand all data infrastructure"]
+        DB_TOOL["run_query\nParameterised SQL execution\nSELECT-only with row-limit safety"]
+        RAG_TOOL["rag_search\nVector similarity search across\npatient files and knowledge base"]
+        FILE_TOOL["file_search\nUploaded document retrieval\nFiltered by user and session ID"]
     end
 
-    subgraph MEMORY["Memory Layer - Mem0"]
-        MEM0["Mem0 Memory - Long-term per-user"]
-        QDRANT["Qdrant Vector Store - Stores memory embeddings"]
-        SQLITE_MEM["SQLite History DB - Memory change log"]
+    subgraph MEMORY["LONG-TERM MEMORY  —  Mem0 with Qdrant"]
+        MEM0["Mem0 Memory Manager\nExtracts and indexes key facts\nfrom every patient conversation"]
+        QDRANT["Qdrant Vector Store\nPersistent on-disk embedding storage\nNamespaced per user and session"]
+        SQLITE_MEM["SQLite Audit Log\nMemory operation history\nStored in logs directory"]
     end
 
-    subgraph RAG_KB["Knowledge Base - RAG"]
-        CHROMA["ChromaDB - Medical PDF knowledge"]
-        PDFSTORE["PDF Documents - Aesthetics and Medical guides"]
+    subgraph RAG_KB["KNOWLEDGE BASE  —  RAG with ChromaDB"]
+        CHROMA["ChromaDB Collection\nSemantic search over indexed\nclinical PDF documents"]
+        PDFSTORE["Aesthetics and Medical PDFs\nClinical protocols, service guides\nand medical reference material"]
     end
 
-    subgraph DB["PostgreSQL Database"]
-        DOCTORS["doctor_details - doctor_clinic_details - doctor_service"]
-        PATIENTS["patient_profile - patient_booked_slot - file_summaries"]
-        SERVICES["services - service_onboarding_details - diagnostic_services"]
-        PRODUCTS["product - product_details - skin_profiles"]
+    subgraph DB["DATA LAYER  —  PostgreSQL"]
+        DOCTORS["Doctors and Clinics\ndoctor_details  |  doctor_clinic_details\ndoctor_service  |  clinic_service"]
+        PATIENTS["Patients and Appointments\npatient_profile  |  patient_booked_slot\nfile_summaries  |  patient_medicine_details"]
+        SERVICES["Services and Diagnostics\nservice_onboarding_details\ndiagnostic_services  |  services"]
+        PRODUCTS["Products and Commerce\nproduct  |  skin_profiles\ncart_item  |  order_details"]
     end
 
-    subgraph AZURE["Azure OpenAI"]
-        GPT["GPT-4o-mini - LLM reasoning engine"]
-        EMBED["text-embedding-ada-002 - Turns text into vectors"]
-        VISION["GPT-4o Vision - Reads images and scanned docs"]
+    subgraph AZURE["AI MODELS  —  Azure OpenAI"]
+        GPT["GPT-4o-mini\nPrimary reasoning LLM\nfor response generation"]
+        EMBED["text-embedding-ada-002\n1536-dim semantic vectors\nfor search and memory"]
+        VISION["GPT-4o Vision\nReads scanned documents,\nhandwritten notes and images"]
     end
 
     APP -->|"HTTPS POST /orch"| FAST
@@ -92,15 +92,15 @@ graph TB
     FAST --> POOL
     FAST --> ORCH
     ORCH --> SECURITY
-    SECURITY -->|"Approved"| QUERY
-    SECURITY -->|"Approved"| FILE
-    SECURITY -->|"Approved"| BOOKING
-    SECURITY -->|"Approved"| MED
-    SECURITY -->|"Approved"| FOLLOWUP
-    SECURITY -->|"Approved"| TREATMENT
-    SECURITY -->|"Approved"| RECOMMEND
-    SECURITY -->|"Approved"| PATIENT_OV
-    SECURITY -->|"Approved"| SKIN
+    SECURITY -->|"Validated"| QUERY
+    SECURITY -->|"Validated"| FILE
+    SECURITY -->|"Validated"| BOOKING
+    SECURITY -->|"Validated"| MED
+    SECURITY -->|"Validated"| FOLLOWUP
+    SECURITY -->|"Validated"| TREATMENT
+    SECURITY -->|"Validated"| RECOMMEND
+    SECURITY -->|"Validated"| PATIENT_OV
+    SECURITY -->|"Validated"| SKIN
 
     QUERY --> MCP_SRV
     FILE --> MCP_SRV
@@ -134,14 +134,14 @@ graph TB
     AZURE --> MCP_SRV
     FILE_TOOL --> VISION
 
-    style CLIENT fill:#e8f4fd,stroke:#2196F3
-    style API fill:#fff3e0,stroke:#FF9800
-    style AGENTS fill:#e8f5e9,stroke:#4CAF50
-    style MCP fill:#fce4ec,stroke:#E91E63
-    style MEMORY fill:#ede7f6,stroke:#673AB7
-    style RAG_KB fill:#e0f2f1,stroke:#009688
-    style DB fill:#fff8e1,stroke:#FFC107
-    style AZURE fill:#e3f2fd,stroke:#1565C0
+    style CLIENT fill:#e8f4fd,stroke:#1565C0,stroke-width:2px
+    style API fill:#fff3e0,stroke:#E65100,stroke-width:2px
+    style AGENTS fill:#e8f5e9,stroke:#2E7D32,stroke-width:2px
+    style MCP fill:#fce4ec,stroke:#880E4F,stroke-width:2px
+    style MEMORY fill:#ede7f6,stroke:#4527A0,stroke-width:2px
+    style RAG_KB fill:#e0f2f1,stroke:#00695C,stroke-width:2px
+    style DB fill:#fff8e1,stroke:#F57F17,stroke-width:2px
+    style AZURE fill:#e3f2fd,stroke:#0D47A1,stroke-width:2px
 ```
 
 ### In Plain English
