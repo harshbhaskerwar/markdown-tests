@@ -1,77 +1,357 @@
-# Hierarchical + Sequential Script Generation (Blueprint Method)
+# Spotlight Blueprint API — Test Case Report
 
-## Overview
-The "Blueprint" method optimizes script generation for application speed and structural integrity. It fundamentally divides the generation process into two decoupled, distinct phases:
-1. **Master Outline Generation:** Generating and streaming a strict, full-length structural blueprint.
-2. **Sequential Scene Execution:** The client iteratively orchestrates requests for individual scenes, mapping the streamed payloads into isolated UI domains.
-
-This document details the theory behind the approach, as well as the architectural coordination required between the AI/Backend team and the Frontend Client (regardless of framework).
+**Project:** Spotlight Blueprint Upload-to-Output API  
+**Test Date:** 15–16 April 2026  
+**Tester:** Harsh  
+**Environment:** Local · Azure OpenAI (gpt-4o-mini + ada-002)
 
 ---
 
-## 🧠 The Generation Approach (How it Works)
-Before discussing technical implementation, it is vital to understand the theory behind the "Hierarchical + Sequential" workflow. This approach mimics a traditional screenwriter's methodology to solve common AI wandering issues.
+## Test Summary Table
 
-### 1. Hierarchical Phase (The Master Outline)
-- **Goal:** Establish a rigid, full-length structural skeleton.
-- **Process:** The LLM is prompted with the core story concept and instructed to generate a high-level, page-by-page outline broken down into distinct, sequentially numbered scenes with brief summaries.
-- **Why it matters:** By locking the structure globally before any dialogue or micro-action is written, we prevent the AI from "wandering" off-plot or losing the narrative thread—a frequent failure when LLMs attempt to generate long-form continuous content all at once.
+| TC ID | Story | Upload Type | Endpoint | Screens | Status | Screen Scores |
+|-------|-------|-------------|----------|---------|--------|---------------|
+| TC01 | The Last Signal | Synopsis / One-Liner | `POST /process/synopsis` | S1 only | ✅ PASS | S1: 100 |
+| TC02 | Borrowed Time | Synopsis / One-Liner | `POST /process/synopsis` | S1 only | ✅ PASS | S1: 100 |
+| TC03 | The Bridge Between Us | Story / Narrative | `POST /process/story` | S1 + S2 | ✅ PASS | S1: 100, S2: 100 |
+| TC04 | The Confession Hour | Story / Narrative | `POST /process/story` | S1 + S2 | ⚠️ PASS w/ Issues | S1: 100, S2: 100 |
+| TC05 | PK (Bound Script) | Screenplay | `POST /process/screenplay` | S1 + S2 + S3 | ⚠️ PASS w/ Issues | S1: 100, S2: 100, S3: 100 |
 
-### 2. Sequential Phase (Scene Execution)
-- **Goal:** Fill in the detailed action and dialogue.
-- **Process:** Based strictly on the generated Master Outline from Phase 1, the system generates the actual script one chunk (scene) at a time. The LLM is given the brief summary for the target scene and asked to expand it into standard screenplay format.
-- **Why it matters:** This isolation significantly reduces token processing overhead and speeds up generation. Because the scene boundaries are already pre-planned hierarchically, the system does not have to re-evaluate the entire plot while merely writing dialogue for a single room.
+> ✅ PASS · ⚠️ PASS w/ Issues · ❌ FAIL
 
 ---
 
-## 🏗️ Streaming Architecture
+## TC01 — AutoFill: Synopsis (The Last Signal)
 
-```mermaid
-sequenceDiagram
-    participant FE as Frontend Application (Client)
-    participant API as AI Service Layer (Backend)
-    participant LLM as LLM Engine
+**Endpoint:** `POST /process/synopsis`  
+**Input File:** `autofill_test_1_synopsis.pdf`
 
-    %% Phase 1: Outline
-    Note over FE,LLM: PHASE 1: Master Outline Initialization
-    FE->>API: POST /generate/outline (Initial Prompt)
-    API->>LLM: Request Master Outline
-    LLM-->>API: Stream Tokens
-    API-->>FE: Transmit Stream (Server-Sent Events)
-    FE->>FE: Parse completed string into Scene Data Array
-    
-    %% Phase 2: Sequential Scenes
-    Note over FE,LLM: PHASE 2: Decentralized Scene Execution
-    loop For each Scene sequentially
-        FE->>API: POST /generate/scene (Pass specific Scene Context)
-        API->>LLM: Request Scene Content
-        LLM-->>API: Stream Tokens
-        API-->>FE: Transmit Stream (Server-Sent Events)
-        FE->>FE: Append tokens to specific Scene UI Container
-    end
+### Input
+
+```
+[Paste input here]
 ```
 
+### Output
+
+```
+[Paste output here]
+```
+
+### Output Analysis
+
+| Field | Result |
+|-------|--------|
+| `status` = SUCCESS | ✅ |
+| `httpStatus` = 200 | ✅ |
+| `uploadType` = SYNOPSIS | ✅ |
+| `processingMode` = GENERATION | ✅ |
+| `suggestedStopScreen` = 1 | ✅ |
+| `primaryLanding` = AUTOFILL_CORE_DETAILS | ✅ |
+| `screenScores.screen1` = 100 | ✅ |
+| `data.generateStory` absent | ✅ |
+| `data.generateScenes` absent | ✅ |
+| `autoFill.projectName` = The Last Signal | ✅ |
+| `autoFill.genre` = [SCI_FI, THRILLER] | ✅ |
+| `autoFill.toneArchetype` = SUSPENSEFUL | ✅ |
+| `autoFill.targetAudience` = ADULTS | ✅ |
+| `autoFill.pace` = SLOW_BURN | ✅ |
+| `autoFill.region` = Rural Montana | ✅ |
+| `autoFill.theme` matches input | ✅ |
+| `characterList` has 2 characters | ✅ |
+| `characterList[0].role` = PROTAGONIST | ✅ |
+| `characterList[1].role` = ANTAGONIST | ✅ |
+| `characterList[0].importanceLevel` = LEAD | ✅ |
+| `characterList[1].importanceLevel` = LEAD/SUPPORTING | ⚠️ Got: `"ANTAGONIST"` |
+| `nextSteps` present (3 items) | ✅ |
+
+### Defects Found
+
+| # | Severity | Field | Issue | Impact |
+|---|----------|-------|-------|--------|
+| D01 | 🟢 Low | `characterList[1].importanceLevel` | Value is `"ANTAGONIST"` — must be `LEAD \| SUPPORTING \| MINOR` | Incorrect importance level on frontend |
+
+### Verdict
+
+**✅ PASS** — All structural requirements met. All correct screens returned. 1 minor schema field-value defect (D01).
+
 ---
 
-## ⚙️ Technical Implementation & Coordination Points
+## TC02 — AutoFill: Synopsis (Borrowed Time)
 
-### 1. The Protocol Standard
-Both the AI Backend and the Frontend must agree to utilize **Server-Sent Events (SSE)** for streaming interactions rather than WebSockets or chunked REST calls. 
-- **Backend Responsibility:** Maintain a unidirectional streaming connection open, yielding tokens immediately as they arrive from the LLM engine to minimize Time-To-First-Byte (TTFB).
-- **Frontend Responsibility:** Listen to the persistent HTTP connection, decoding raw byte streams into UTF-8 strings, and flushing them to the UI state incrementally.
+**Endpoint:** `POST /process/synopsis`  
+**Input File:** `autofill_test_2_synopsis.pdf`
 
-### 2. Phase 1: Outline Parsing Contract
-For Phase 1 to effectively trigger Phase 2, the frontend must be capable of algorithmically slicing the streamed outline into an array of individual scene objects.
-- **AI Prompt Engineering:** The AI Lead must enforce strict formatting constraints on the LLM's outline output (e.g., standardizing on Markdown lists like `1. INT. KITCHEN - DAY - Summary...`).
-- **Frontend Parsing:** Upon the closure of the Outline stream connection, the frontend runs a parser (e.g., regex pattern matching) over the complete string. It maps this data into temporary state objects representing the "Queue". Only a uniformly formatted stream from the backend prevents parsing corruption at this stage.
+### Input
 
-### 3. Phase 2: Queue Orchestration and State Ownership
-The Backend must remain entirely stateless. It does not track which scenes have been generated. The **Frontend** operates as the master orchestrator.
-- **Sequential Awaiting:** The frontend must iterate over the parsed Scene Array and initialize one SSE connection for `Scene 1`. It strictly awaits the closure of the `Scene 1` stream before firing the `POST` request for `Scene 2`. 
-- **Context Injection:** When requesting a specific scene, the frontend must inject the specific context from the parsed Phase 1 outline data back into the API request payload so the stateless backend understands what to write.
-- **Container Targetting:** Because the frontend manages the loop, it knows exactly which Scene is currently loading and effortlessly pipes the incoming payload to the correct modular UI container (e.g., an individual text editor component bound to Scene ID 4).
+```
+[Paste input here]
+```
 
-### 4. Error Handling and Resiliency
-Because the frontend holds the state mechanism, error recovery becomes vastly simplified.
-- **Connection Drops:** If a user's network drops during Phase 2 (e.g., while streaming Scene 5), the frontend simply registers the failure, retains Scenes 1-4 in local memory, and initiates an automatic or manual retry request exclusively targeting Scene 5.
-- **Rate Limiting:** If the backend LLM engine hits an API quota limit during the iteration loop, the backend returns a standard 429 HTTP status. The frontend intercepts this, pauses the execution queue, and implements an exponential backoff strategy before resuming the remainder of the scenes.
+### Output
+
+```
+[Paste output here]
+```
+
+### Output Analysis
+
+| Field | Result |
+|-------|--------|
+| `status` = SUCCESS | ✅ |
+| `uploadType` = SYNOPSIS | ✅ |
+| `processingMode` = GENERATION | ✅ |
+| `suggestedStopScreen` = 1 | ✅ |
+| `primaryLanding` = AUTOFILL_CORE_DETAILS | ✅ |
+| `screenScores.screen1` = 100 | ✅ |
+| `data.generateStory` absent | ✅ |
+| `data.generateScenes` absent | ✅ |
+| `autoFill.projectName` = Borrowed Time | ✅ |
+| `autoFill.genre` = [DRAMA, FANTASY] | ✅ |
+| `autoFill.endingType` = BITTERSWEET | ✅ |
+| `autoFill.targetAudience` = FAMILY | ✅ |
+| `autoFill.region` = Mumbai, India | ✅ |
+| `autoFill.toneArchetype` = MELANCHOLIC | ✅ |
+| `autoFill.theme` matches input | ✅ |
+| `characterList` has 3 characters | ✅ |
+| Riya Sharma — LEAD, PROTAGONIST | ✅ |
+| Meera Sharma — SUPPORTING, MENTOR | ✅ |
+| Uncle Ajit — SUPPORTING, FOIL | ✅ |
+| `traits` in UPPERCASE (consistent) | ⚠️ Mixed case (e.g., "Intelligent") |
+
+### Defects Found
+
+| # | Severity | Field | Issue | Impact |
+|---|----------|-------|-------|--------|
+| D02 | 🟢 Low | `characterList[*].traits` | Trait values in mixed case instead of consistent UPPERCASE as in TC01 | Minor display inconsistency |
+
+### Verdict
+
+**✅ PASS** — All 3 input characters correctly identified with full psychological depth. Correct screen gating. 1 minor consistency defect (D02).
+
+---
+
+## TC03 — Story Upload (The Bridge Between Us)
+
+**Endpoint:** `POST /process/story`  
+**Input File:** `story_test_1_full_narrative.pdf`
+
+### Input
+
+```
+[Paste input here]
+```
+
+### Output
+
+```
+[Paste output here]
+```
+
+### Output Analysis
+
+| Field | Result |
+|-------|--------|
+| `status` = SUCCESS | ✅ |
+| `uploadType` = STORY | ✅ |
+| `processingMode` = EXTRACTION | ✅ |
+| `suggestedStopScreen` = 2 | ✅ |
+| `primaryLanding` = GENERATE_STORY | ✅ |
+| `screenScores.screen1` = 100 | ✅ |
+| `screenScores.screen2` = 100 | ✅ |
+| `data.generateScenes` absent | ✅ |
+| `autoFill.projectName` = The Bridge Between Us | ✅ |
+| `autoFill.genre` = [DRAMA] | ✅ |
+| `autoFill.endingType` = BITTERSWEET | ✅ |
+| `autoFill.toneArchetype` = MELANCHOLIC | ✅ |
+| `characterList` has 3 characters | ✅ |
+| Arjun Mehta — LEAD, PROTAGONIST | ✅ |
+| Ramesh Mehta — LEAD, role correct | ⚠️ Got: `PROTAGONIST` (should be MENTOR) |
+| Priya — SUPPORTING, LOVE_INTEREST | ✅ |
+| `generateStory.story` = original prose preserved | ✅ (with PDF spacing artifact) |
+| `generateStory.logline` present | ✅ |
+| `generateStory.beatSheet` — 8 beats filled | ✅ |
+| `generateStory.synopsis` present | ✅ |
+| `generateStory.storyType` = FEATURE_FILM | ✅ |
+| `generateStory.visualStyle` = CINEMATIC_REALISM | ✅ |
+
+### Defects Found
+
+| # | Severity | Field | Issue | Impact |
+|---|----------|-------|-------|--------|
+| D03 | 🟢 Low | `characterList[1].role` (Ramesh) | Ramesh given `PROTAGONIST` — only one protagonist allowed; should be `MENTOR` | Character role display issue |
+| D04 | 🟢 Low | `generateStory.story` | Story preserved but with PDF double-space artifacts (e.g., `"Arjun  Mehta"`). Content is correct — artifact is from PDF-to-text parser. | Visual/cosmetic only |
+
+### Verdict
+
+**✅ PASS** — Both screens returned correctly. Original story preserved. Beat sheet and logline generated correctly. Screen 3 correctly absent.
+
+---
+
+## TC04 — Story Upload (The Confession Hour)
+
+**Endpoint:** `POST /process/story`  
+**Input File:** `story_test_2_full_narrative.pdf`
+
+### Input
+
+```
+[Paste input here]
+```
+
+### Output
+
+```
+[Paste output here]
+```
+
+### Output Analysis
+
+| Field | Result |
+|-------|--------|
+| `status` = SUCCESS | ✅ |
+| `uploadType` = STORY | ✅ |
+| `processingMode` = EXTRACTION | ✅ |
+| `suggestedStopScreen` = 2 | ✅ |
+| `primaryLanding` = GENERATE_STORY | ✅ |
+| `screenScores.screen1` = 100 | ✅ |
+| `screenScores.screen2` = 100 | ✅ |
+| `data.generateScenes` absent | ✅ |
+| `autoFill.projectName` = The Confession Hour | ❌ Got: `"The Quiet City"` |
+| `generateStory.projectName` = The Confession Hour | ❌ Got: `"The Quiet City"` |
+| `autoFill.genre` = [DRAMA] | ✅ |
+| `autoFill.toneArchetype` = MELANCHOLIC | ✅ |
+| `autoFill.region` = Kozhikode | ✅ |
+| `characterList` has 3 characters | ✅ |
+| Khalid — LEAD, PROTAGONIST | ✅ |
+| Nadia — SUPPORTING, FOIL | ✅ |
+| Sara — SUPPORTING, SIDEKICK (daughter, age 9) | ❌ Got: `LOVE_INTEREST` |
+| `generateStory.story` = original prose preserved | ✅ (with PDF spacing artifact) |
+| `generateStory.logline` present | ✅ |
+| `generateStory.beatSheet` — 8 beats filled | ✅ |
+| `generateStory.synopsis` present | ✅ |
+
+### Defects Found
+
+| # | Severity | Field | Issue | Impact |
+|---|----------|-------|-------|--------|
+| D05 | 🟡 Medium | `projectName` (both screens) | Title renamed from **"The Confession Hour"** → **"The Quiet City"** by AI inference | Wrong project name shown across all screens |
+| D06 | 🟡 Medium | `characterList[1].role` (Sara) | Sara is Khalid's 9-year-old daughter; classified as `LOVE_INTEREST` | Incorrect character role on breakdown screen |
+| D07 | 🟢 Low | `generateStory.story` | PDF spacing artifact — same as D04 | Visual/cosmetic only |
+
+### Verdict
+
+**⚠️ PASS with Issues** — Both screens returned, beat sheet complete, original story preserved. 2 medium-severity AI inference errors: title renamed, child character misclassified.
+
+---
+
+## TC05 — Screenplay Upload / Bound Script (PK)
+
+**Endpoint:** `POST /process/screenplay`  
+**Input File:** `Pk-movie-script-boundscript.pdf`
+
+### Input
+
+```
+[Paste input here]
+```
+
+### Output
+
+```
+[Paste output here]
+```
+
+### Output Analysis
+
+| Field | Result |
+|-------|--------|
+| `status` = SUCCESS | ✅ |
+| `uploadType` = SCREENPLAY | ✅ |
+| `processingMode` = EXTRACTION | ✅ |
+| `suggestedStopScreen` = 3 | ✅ |
+| `primaryLanding` = SCENE_TREATMENT | ✅ |
+| `screenScores.screen1` = 100 | ✅ |
+| `screenScores.screen2` = 100 | ✅ |
+| `screenScores.screen3` = 100 | ✅ |
+| `autoFill.projectName` = PK | ✅ |
+| `autoFill.genre` = [COMEDY, DRAMA, SCI_FI] | ✅ |
+| `autoFill.toneArchetype` = COMEDIC | ✅ |
+| `autoFill.targetAudience` = ALL_AGES | ✅ |
+| PK — LEAD, PROTAGONIST | ✅ |
+| Jaggu — SUPPORTING, SIDEKICK | ✅ |
+| `generateStory.logline` present | ✅ |
+| `generateStory.beatSheet` — 8 beats filled | ✅ |
+| `generateScenes.scenes` count = 50 | ✅ |
+| All scenes sequential (`sceneSeq` 1–50) | ✅ |
+| All scenes have `slugline` with page estimate | ✅ |
+| All scenes have `pagesEighthsEst` | ✅ |
+| `intExt` = only INT / EXT / INT/EXT | ❌ 3 scenes use `"I/E"` (scenes 12, 13, 16) |
+| `pagesEighthsEst` notation valid (max 7/8) | ⚠️ Scene 8: `"1 8/8"` (should be `"2 0/8"`) |
+
+### Scene-Level Defects
+
+| Scene # | Field | Got |
+|---------|-------|-----|
+| Scene 12 | `intExt` | `"I/E"` ❌ |
+| Scene 13 | `intExt` | `"I/E"` ❌ |
+| Scene 16 | `intExt` | `"I/E"` ❌ |
+| Scene 8  | `pagesEighthsEst` | `"1 8/8"` ⚠️ |
+
+### Defects Found
+
+| # | Severity | Field | Issue | Impact |
+|---|----------|-------|-------|--------|
+| D08 | 🟡 Medium | `scenes[12,13,16].intExt` | `"I/E"` used instead of required `"INT/EXT"` — schema says `exactly INT \| EXT \| INT/EXT` | Frontend `intExt` mapping fails for these 3 scenes |
+| D09 | 🟢 Low | `scenes[8].pagesEighthsEst` | `"1 8/8"` — eighths run 0/8–7/8 then reset; should be `"2 0/8"` | Minor notation issue |
+
+### Verdict
+
+**⚠️ PASS with Issues** — All 3 screens returned, 100% scores, 50 scenes with sluglines and page estimates. 3 scenes have `intExt` shorthand defect — prompt enforcement gap.
+
+---
+
+## Overall Defect Summary
+
+| Defect ID | TC | Severity | Field | Description |
+|-----------|-----|----------|-------|-------------|
+| D01 | TC01 | 🟢 Low | `importanceLevel` | Value `"ANTAGONIST"` — must be `LEAD/SUPPORTING/MINOR` |
+| D02 | TC02 | 🟢 Low | `traits` | Mixed case instead of UPPERCASE — inconsistent across runs |
+| D03 | TC03 | 🟢 Low | `role` (Ramesh) | Two characters both assigned `PROTAGONIST` |
+| D04 | TC03 | 🟢 Low | `story` | PDF double-space extraction artifact |
+| D05 | TC04 | 🟡 Medium | `projectName` | Title renamed "The Confession Hour" → "The Quiet City" |
+| D06 | TC04 | 🟡 Medium | `role` (Sara) | Daughter (age 9) classified as `LOVE_INTEREST` |
+| D07 | TC04 | 🟢 Low | `story` | PDF double-space extraction artifact (same as D04) |
+| D08 | TC05 | 🟡 Medium | `intExt` | `"I/E"` used instead of `"INT/EXT"` in 3 scenes |
+| D09 | TC05 | 🟢 Low | `pagesEighthsEst` | `"1 8/8"` instead of `"2 0/8"` |
+
+| Severity | Count |
+|----------|-------|
+| 🔴 High | 0 |
+| 🟡 Medium | 3 |
+| 🟢 Low | 6 |
+
+---
+
+## Key Findings
+
+### ✅ What Worked
+- All 5 TCs returned `status: SUCCESS` with no API errors
+- Screen gating correct: Synopsis → S1, Story → S1+S2, Screenplay → S1+S2+S3
+- `suggestedStopScreen` and `primaryLanding` correct in every test
+- `screenScores` = 100 on all filled screens across all 5 cases
+- Original story prose preserved in TC03, TC04 (content verbatim — PDF spacing is parser-level)
+- All 50 PK scenes generated with sequential numbering, sluglines, and page estimates
+- Beat sheet (8 milestones), logline, synopsis correct in TC03, TC04, TC05
+
+### ⚠️ Next Sprint Fixes (Prompt Level)
+1. **D08** — Add to `fill_screen3`: _"never write 'I/E' — always write 'INT/EXT' in full"_
+2. **D05** — LLM to extract title from document heading, not infer thematically
+3. **D06** — Add guidance: child characters of protagonist default to `SIDEKICK`, not `LOVE_INTEREST`
+
+### 📝 Known Limitation
+- **D04 / D07 — PDF double-spacing:** `pypdf` extractor can produce double spaces when reading PDF files generated from Word/Docs. Story content is 100% intact. Files uploaded as `.txt` will not have this artifact.
+
+---
+
+*Generated: 16 April 2026 · Output JSONs in `test_files/`*
