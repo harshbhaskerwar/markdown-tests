@@ -1,10 +1,112 @@
 # Spotlight AI — API Reference
 
-Python AI service covering two workflows: **Story Generation** and **Scene Treatment**. Both follow the same standard request/response envelope.
+Python AI service covering three workflows: **Autofill**, **Story Generation**, and **Scene Treatment**. All follow the same standard request/response envelope.
 
 ---
 
-## 1. Generate Story
+## 1. Autofill
+
+**POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/autofill`
+
+Takes partial project data and basic character info — returns all fields fully filled with AI-generated values including complete character depth.
+
+### Request
+```json
+{
+  "projectName": "The rural village cricket game",
+  "storyIdea": "A village boy dreams of playing cricket for India",
+  "genre": ["COMEDY"],
+  "narrativeStyle": "COMMERCIAL_MASS_ENTERTAINER",
+  "storyStructure": "THREE_ACT",
+  "pace": "BALANCED_NARRATIVE",
+  "theme": "FAMILY_AND_BELONGING",
+  "contentSensitivity": "CLEAN_FAMILY_SAFE",
+  "toneArchetype": "FEEL_GOOD",
+  "endingType": "HAPPY_ENDING",
+  "region": "Rural India",
+  "targetAudience": ["FAMILY_ALL_AGES"],
+  "referenceFilmsWorks": "Lagaan, Chak De India",
+  "characterList": [
+    {
+      "name": "Arjun Kumar",
+      "role": "MAIN",
+      "description": "A determined village boy who lives for cricket."
+    },
+    {
+      "name": "Vikram Rao",
+      "role": "SECOND_LEAD",
+      "description": "Arjun's mentor and former school cricketer."
+    }
+  ]
+}
+```
+
+| Field | Notes |
+|---|---|
+| All fields | Optional — send whatever is available |
+| `characterList` | Only `name`, `role`, `description` needed |
+| `role` values | `MAIN` `SECOND_LEAD` `VILLAIN` `SUPPORTING` |
+
+### Response
+```json
+{
+  "status": "SUCCESS",
+  "message": "Story parameters auto-filled successfully",
+  "httpStatus": 200,
+  "data": {
+    "projectName": "...",
+    "storyIdea": "...",
+    "genre": ["COMEDY"],
+    "narrativeStyle": "...",
+    "storyStructure": "...",
+    "endingType": "...",
+    "openingSetupIdea": "...",
+    "climaxIdea": "...",
+    "pace": "...",
+    "toneArchetype": "...",
+    "theme": "...",
+    "region": "...",
+    "targetAudience": ["..."],
+    "contentSensitivity": "...",
+    "referenceFilmsWorks": "...",
+    "characterList": [
+      {
+        "name": "Arjun Kumar",
+        "role": "MAIN",
+        "description": "...",
+        "importanceLevel": "...",
+        "storySignificance": "...",
+        "behaviour": "...",
+        "goalInternal": "...",
+        "goalExternal": "...",
+        "backstory": "...",
+        "struggles": "...",
+        "enneagramType": "...",
+        "traits": "...",
+        "coreMotivation": "...",
+        "coreValues": "...",
+        "coreFear": "...",
+        "ghost": "...",
+        "lie": "...",
+        "want": "...",
+        "need": "...",
+        "purposeOfLife": "...",
+        "superObjective": "..."
+      }
+    ]
+  },
+  "timestamp": "2026-04-19T14:31:38.123456"
+}
+```
+
+| Field | Notes |
+|---|---|
+| All story fields | Completed/corrected by AI |
+| `characterList` | Full character depth — all 20 fields filled |
+
+---
+
+## 2. Generate Story
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/story`
 
@@ -78,23 +180,23 @@ Python AI service covering two workflows: **Story Generation** and **Scene Treat
 
 ---
 
-## 2. Generate Scene Treatment
+## 3. Scene Treatment
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/scene`
 
-> Use `story` and `synopsis` from the Generate Story response above as inputs here.
+> Use `story` and `synopsis` from the Generate Story response as inputs here.
 
 ### Request
 ```json
 {
   "projectName": "The rural village cricket game",
-  "story": "<paste story from step 1>",
-  "synopsis": "<paste synopsis from step 1>",
+  "story": "<story from step 2>",
+  "synopsis": "<synopsis from step 2>",
   "characterList": [
     {
       "name": "Arjun Kumar",
       "role": "MAIN",
-      "description": "A determined 15-year-old village boy who lives for cricket."
+      "description": "A determined village boy who lives for cricket."
     },
     {
       "name": "Vikram Rao",
@@ -107,12 +209,10 @@ Python AI service covering two workflows: **Story Generation** and **Scene Treat
 
 | Field | Required | Notes |
 |---|---|---|
-| `story` | Yes | Full story from step 1 |
-| `synopsis` | Yes | Synopsis from step 1 |
+| `story` | Yes | Full story from step 2 |
+| `synopsis` | Yes | Synopsis from step 2 |
 | `projectName` | No | Project title |
-| `characterList` | No | name, role, description only |
-
-**Character roles:** `MAIN` `SECOND_LEAD` `VILLAIN` `SUPPORTING`
+| `characterList` | No | `name`, `role`, `description` only |
 
 ### Response
 ```json
@@ -153,7 +253,7 @@ Python AI service covering two workflows: **Story Generation** and **Scene Treat
 | `image.prompt` | Image generation text |
 | `storyBoardList` | Always empty `[]` |
 
-> Scene count is AI-determined based on story complexity (40–99 scenes). Response time may be 5–15 minutes.
+> Scene count is AI-determined by story complexity (40–99 scenes). Response time may be 5–15 minutes.
 
 ---
 
