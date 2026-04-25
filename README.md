@@ -257,6 +257,104 @@ Takes partial project data and basic character info — returns all fields fully
 
 ---
 
+## 4. Single Image Generation
+
+**POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/generate-single-image`
+
+Generates one image using Vertex AI Imagen, uploads it to storage, and returns a 7-day presigned URL.
+
+### Request
+```json
+{
+  "id": "922f5425-2284-410c-897b-6f4c4d215f65",
+  "prompt": "Aion headshot: mid-30s, fair-olive complexion, short cropped dark hair, clean-lined neutral tunic.",
+  "visualStyle": "CINEMATIC",
+  "projectName": "Visual Asset Project",
+  "aspectRatio": "16:9",
+  "negativePrompt": "blurry, low quality, distorted",
+  "sampleCount": 1,
+  "personGeneration": "ALLOW_ALL",
+  "safetySetting": "BLOCK_MEDIUM_AND_ABOVE",
+  "addWatermark": false
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `id` | Yes | Asset identifier used in output filename |
+| `prompt` | Yes | Base image prompt text |
+| `visualStyle` | No | Appended as `in exact <style> style` |
+| `projectName` | No | Metadata/context field |
+| `aspectRatio` | No | Example: `16:9`, `1:1`, `9:16` |
+| `negativePrompt` | No | Undesired elements |
+| `sampleCount` | No | Number of samples to request |
+| `personGeneration` | No | Person policy for generation |
+| `safetySetting` | No | Vertex safety threshold |
+| `addWatermark` | No | Vertex watermark toggle |
+
+### Response
+```json
+{
+  "data": {
+    "outputs": [
+      {
+        "imageUrl": "https://nm1ecs.yotta.com:9021/previsualization/text-image/image_922f5425-2284-410c-897b-6f4c4d215f65.png?...",
+        "seed": 1234,
+        "finishReason": "SUCCESS"
+      }
+    ],
+    "usage": {
+      "image_count": 1
+    }
+  }
+}
+```
+
+---
+
+## 5. Single Video Generation
+
+**POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/generate-single-video`
+
+Generates one video using Runway Gen-4 Turbo from a source image URL, uploads to storage, and returns a 7-day presigned URL.
+
+### Request
+```json
+{
+  "id": "6aa2cac2-ba52-443c-8813-b6ef8c43e515",
+  "prompt": "Camera slowly pushes in as wind moves through the field and dust rises.",
+  "imageUrl": "https://nm1ecs.yotta.com:9021/previsualization/text-image/image_cea626dd-a9e5-46eb-b0ac-2a4d24927b48.png?...",
+  "projectName": "Visual Asset Project"
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `id` | Yes | Asset identifier used in output filename |
+| `prompt` | Yes | Motion/video prompt |
+| `imageUrl` | Yes | Source image URL (presigned or public) |
+| `projectName` | No | Metadata/context field |
+
+### Response
+```json
+{
+  "data": {
+    "outputs": [
+      {
+        "videoUrl": "https://nm1ecs.yotta.com:9021/previsualization/image-video/video_6aa2cac2-ba52-443c-8813-b6ef8c43e515.mp4?...",
+        "duration": 5,
+        "finishReason": "SUCCESS"
+      }
+    ],
+    "usage": {
+      "video_count": 1
+    }
+  }
+}
+```
+
+---
+
 ## Errors
 
 ```json
