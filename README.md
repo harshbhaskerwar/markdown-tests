@@ -95,7 +95,12 @@ Takes partial project data and basic character info — returns all fields fully
       }
     ]
   },
-  "timestamp": "2026-04-19T14:31:38.123456"
+  "timestamp": "2026-04-19T14:31:38.123456",
+  "usage": {
+    "prompt_tokens": 1240,
+    "completion_tokens": 4500,
+    "total_tokens": 5740
+  }
 }
 ```
 
@@ -166,7 +171,12 @@ Takes partial project data and basic character info — returns all fields fully
     },
     "synopsis": "1-3 paragraph producer summary."
   },
-  "timestamp": "2026-04-19T14:31:38.123456"
+  "timestamp": "2026-04-19T14:31:38.123456",
+  "usage": {
+    "prompt_tokens": 1240,
+    "completion_tokens": 4500,
+    "total_tokens": 5740
+  }
 }
 ```
 
@@ -237,7 +247,12 @@ Takes partial project data and basic character info — returns all fields fully
       }
     ]
   },
-  "timestamp": "2026-04-19T14:31:38.123456"
+  "timestamp": "2026-04-19T14:31:38.123456",
+  "usage": {
+    "prompt_tokens": 1240,
+    "completion_tokens": 4500,
+    "total_tokens": 5740
+  }
 }
 ```
 
@@ -257,7 +272,107 @@ Takes partial project data and basic character info — returns all fields fully
 
 ---
 
-## 4. Single Image Generation
+## 4. Generate Complete Visual Asset Package
+
+**POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/visual-asset`
+
+Generates a complete visual asset package containing scene-by-scene image and video prompts, as well as comprehensive character visual guides.
+
+### Request
+```json
+{
+  "visualStyle": "Dusty Village Evenings, High Contrast Sunsets, Gritty Sports Action",
+  "toneArchetype": "INSPIRATIONAL_DRAMA",
+  "genre": ["DRAMA", "SPORTS"],
+  "logline": "A former star bowler in a remote village must rediscover his courage to lead a ragtag cricket team against a corrupt landlord's dominance.",
+  "synopsis": "Vikram, once the village's fastest bowler...",
+  "beatSheet": {
+      "1. Setup": "...",
+      "2. Inciting Incident": "..."
+  },
+  "story": "Full story text here...",
+  "characterList": [
+    {
+      "name": "Vikram",
+      "role": "MAIN",
+      "description": "Mid-30s, lean but muscular, with a prominent scar on his bowling wrist."
+    }
+  ]
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `visualStyle` | No | Cinematography and visual esthetic |
+| `toneArchetype` | No | Overall tone |
+| `genre` | No | List of genres |
+| `logline` | No | Story logline |
+| `synopsis` | No | Short producer summary |
+| `beatSheet` | No | Major story beats map |
+| `story` | No | Full generated story text |
+| `characterList` | No | List of characters with descriptions |
+
+> Though technically optional fields, for best results provide the complete story package from the previous generation steps.
+
+### Response
+```json
+{
+  "status": "SUCCESS",
+  "message": "Visual asset data generated successfully",
+  "httpStatus": 200,
+  "data": {
+    "visualStyle": "Dusty Village Evenings...",
+    "characters": [
+      {
+        "name": "Vikram",
+        "description": "Mid-30s, lean but muscular build...",
+        "importanceLevel": "Primary",
+        "storySignificance": "Vikram's journey of redemption...",
+        "imagePrompt": "Vikram headshot: mid-30s, lean but muscular... golden-hour hard key light.",
+        "behaviour": "Pragmatic, disciplined, and strategically sharp",
+        "role": "MAIN",
+        "goalInternal": "To rediscover his self-worth...",
+        "goalExternal": "To lead the cricket team...",
+        "appearanceInScenes": [1, 2, 3, 4, 5, 6, 10]
+      }
+    ],
+    "scenes": [
+      {
+        "sceneSeq": 1,
+        "slugline": "SCENE 1. EXT. VILLAGE CRICKET PITCH – EVENING",
+        "intExt": "EXT.",
+        "dayNight": "EVENING",
+        "location": "VILLAGE CRICKET PITCH",
+        "pagesEighthsEst": "2/8",
+        "visualSummary": "Vikram stands alone, staring at the rundown cricket pitch...",
+        "image": {
+          "prompt": "[Vikram: mid-30s... in worn cricket gear] [VILLAGE CRICKET PITCH: dusty field] sunset backlighting...",
+          "video": {
+            "prompt": "[Vikram: mid-30s...] [VILLAGE CRICKET PITCH: dusty field] dolly shot moving slowly towards Vikram's face..."
+          }
+        }
+      }
+    ]
+  },
+  "timestamp": "2026-04-26T14:54:43.641547",
+  "usage": {
+    "prompt_tokens": 1240,
+    "completion_tokens": 4500,
+    "total_tokens": 5740
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `characters[].imagePrompt` | Detailed headshot prompt meant for primary character rendering |
+| `characters[].appearanceInScenes` | Array of scene sequences where character appears |
+| `scenes[].image.prompt` | Frame generation prompt combining characters and location |
+| `scenes[].image.video.prompt` | Motion generation video prompt for runway/kling (<1000 chars) |
+
+---
+
+## 5. Single Image Generation
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/generate-single-image`
 
@@ -312,7 +427,7 @@ Generates one image using Vertex AI Imagen, uploads it to storage, and returns a
 
 ---
 
-## 5. Single Video Generation
+## 6. Single Video Generation
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/generate-single-video`
 
