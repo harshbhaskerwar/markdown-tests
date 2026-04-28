@@ -480,3 +480,213 @@ Generates one video using Runway Gen-4 Turbo from a source image URL, uploads to
 |---|---|
 | `422` | Missing required field |
 | `500` | AI generation failed |
+
+---
+
+# UPLOAD SCRIPT APIs (File Processing)
+
+These three endpoints accept a PDF or DOCX file via `multipart/form-data` and automatically extract or generate the necessary data for the Spotlight application. They are distinct from the standard generation APIs as they ingest user files directly.
+
+## 7. Process Synopsis (One-Liner)
+
+**POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/process/synopsis`
+
+Accepts a short idea or synopsis. Automatically extracts and generates characters, genre, and key story parameters.
+**Fills Screen 1 only (AutoFill).**
+
+### Request (multipart/form-data)
+| Field | Type | Notes |
+|---|---|---|
+| `file` | File | The synopsis document (PDF/DOCX) |
+
+### Response
+```json
+{
+  "status": "SUCCESS",
+  "message": "Synopsis processed successfully",
+  "httpStatus": 200,
+  "sessionId": "df6328f0-2f3a-4530-b85f-99b296b70436",
+  "uploadType": "SYNOPSIS",
+  "processingMode": "GENERATION",
+  "suggestedStopScreen": 1,
+  "primaryLanding": "AUTOFILL_CORE_DETAILS",
+  "screenScores": {
+    "screen1": 100
+  },
+  "data": {
+    "autoFill": {
+      "projectName": "The Last Signal",
+      "storyIdea": "...",
+      "sceneCount": 50,
+      "genre": ["SCI_FI", "THRILLER"],
+      "narrativeStyle": "LINEAR",
+      "storyStructure": "THREE_ACT",
+      "endingType": "AMBIGUOUS",
+      "characterList": [
+        {
+          "name": "Dr. Eleanor Voss",
+          "importanceLevel": "LEAD",
+          "role": "PROTAGONIST",
+          "description": "...",
+          "traits": ["INTELLIGENT", "DETERMINED"]
+        },
+        {
+          "name": "Director Hayes",
+          "importanceLevel": "SUPPORTING",
+          "role": "ANTAGONIST",
+          "description": "...",
+          "traits": ["RUTHLESS", "AUTHORITATIVE"]
+        }
+      ]
+    }
+  },
+  "nextSteps": [
+    "User reviews and edits auto-filled Core Details",
+    "User proceeds to Story Generation (Screen 2)",
+    "User proceeds to Scene Treatment (Screen 3)"
+  ]
+}
+```
+
+---
+
+## 8. Process Story (Narrative)
+
+**POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/process/story`
+
+Accepts a prose narrative or treatment. Extracts core details and builds a beat sheet, while preserving the original story verbatim.
+**Fills Screen 1 + Screen 2 (AutoFill & Generate Story).** Scene treatment is NOT generated automatically.
+
+### Request (multipart/form-data)
+| Field | Type | Notes |
+|---|---|---|
+| `file` | File | The story document (PDF/DOCX) |
+
+### Response
+```json
+{
+  "status": "SUCCESS",
+  "message": "Story processed successfully",
+  "httpStatus": 200,
+  "sessionId": "97f51e7b-d9fe-46d0-b204-08cb0f66937c",
+  "uploadType": "STORY",
+  "processingMode": "EXTRACTION",
+  "suggestedStopScreen": 2,
+  "primaryLanding": "GENERATE_STORY",
+  "screenScores": {
+    "screen1": 100,
+    "screen2": 100
+  },
+  "data": {
+    "autoFill": {
+      "projectName": "THE BRIDGE BETWEEN US",
+      "genre": ["DRAMA"],
+      "characterList": [
+        {
+          "name": "Arjun Mehta",
+          "importanceLevel": "LEAD",
+          "role": "PROTAGONIST"
+        },
+        {
+          "name": "Ramesh Mehta",
+          "importanceLevel": "SUPPORTING",
+          "role": "MENTOR"
+        }
+      ]
+    },
+    "generateStory": {
+      "story": "Original story text preserved verbatim...",
+      "logline": "...",
+      "beatSheet": {
+        "setup": "...",
+        "incitingIncident": "...",
+        "firstTurningPoint": "..."
+      },
+      "synopsis": "..."
+    }
+  }
+}
+```
+
+---
+
+## 9. Process Screenplay (Bound Script)
+
+**POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/process/screenplay`
+
+Accepts a full structured script/screenplay. Performs a complete end-to-end extraction and generation process.
+**Fills Screen 1 + Screen 2 + Screen 3 (AutoFill, Generate Story, and Scene Treatment).**
+
+### Request (multipart/form-data)
+| Field | Type | Notes |
+|---|---|---|
+| `file` | File | The bound script document (PDF/DOCX) |
+
+### Response
+```json
+{
+  "status": "SUCCESS",
+  "message": "Screenplay processed successfully",
+  "httpStatus": 200,
+  "sessionId": "60874537-e7ed-44eb-8162-49a04ea8c360",
+  "uploadType": "SCREENPLAY",
+  "processingMode": "EXTRACTION",
+  "suggestedStopScreen": 3,
+  "primaryLanding": "SCENE_TREATMENT",
+  "screenScores": {
+    "screen1": 100,
+    "screen2": 100,
+    "screen3": 100
+  },
+  "data": {
+    "autoFill": {
+      "projectName": "PK",
+      "genre": ["COMEDY", "DRAMA", "SCI_FI"],
+      "characterList": [
+        {
+          "name": "PK",
+          "importanceLevel": "LEAD",
+          "role": "PROTAGONIST"
+        },
+        {
+          "name": "Jaggu",
+          "importanceLevel": "SUPPORTING",
+          "role": "SIDEKICK"
+        }
+      ]
+    },
+    "generateStory": {
+      "story": "Generated scriptment based on screenplay...",
+      "logline": "...",
+      "beatSheet": { 
+        "setup": "...",
+        "incitingIncident": "..."
+      },
+      "synopsis": "..."
+    },
+    "generateScenes": {
+      "scenes": [
+        {
+          "sceneSeq": 1,
+          "intExt": "EXT",
+          "dayNight": "NIGHT",
+          "location": "SPACE",
+          "pagesEighthsEst": "1 1/8",
+          "visualSummary": "In the vastness of space, millions of twinkling stars...",
+          "slugline": "EXT. SPACE - NIGHT (1 1/8)"
+        },
+        {
+          "sceneSeq": 2,
+          "intExt": "EXT",
+          "dayNight": "NIGHT",
+          "location": "SAMBHAR LAKE",
+          "pagesEighthsEst": "1 2/8",
+          "visualSummary": "A wide barren landscape unfolds, dominated by a small temple...",
+          "slugline": "EXT. SAMBHAR LAKE - NIGHT (1 2/8)"
+        }
+      ]
+    }
+  }
+}
+```
+
