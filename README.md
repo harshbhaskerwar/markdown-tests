@@ -99,7 +99,9 @@ Takes partial project data and basic character info — returns all fields fully
   "usage": {
     "prompt_tokens": 1240,
     "completion_tokens": 4500,
-    "total_tokens": 5740
+    "total_tokens": 5740,
+    "input_tokens": 1240,
+    "output_tokens": 4500
   }
 }
 ```
@@ -130,7 +132,23 @@ Takes partial project data and basic character info — returns all fields fully
   "region": "Rural India",
   "targetAudience": ["FAMILY_ALL_AGES"],
   "referenceFilmsWorks": "Lagaan, Chak De India",
-  "creativeNotes": "Focus on community and family bonds"
+  "creativeNotes": "Focus on community and family bonds",
+  "characterList": [
+    {
+      "name": "Arjun Kumar",
+      "role": "MAIN",
+      "description": "A determined village boy who lives for cricket.",
+      "goalInternal": "Prove his worth to his family.",
+      "goalExternal": "Get selected for the national cricket team.",
+      "backstory": "Grew up in poverty, cricket was his only escape.",
+      "coreMotivation": "Recognition and belonging.",
+      "coreFear": "Being ordinary.",
+      "ghost": "His father's disappointment after a crucial match loss.",
+      "lie": "He believes he must win alone to matter.",
+      "want": "A place in the national squad.",
+      "need": "To trust others and accept help."
+    }
+  ]
 }
 ```
 
@@ -149,6 +167,9 @@ Takes partial project data and basic character info — returns all fields fully
 | `targetAudience` | No | Intended viewers |
 | `referenceFilmsWorks` | No | Style references |
 | `creativeNotes` | No | Extra direction |
+| `characterList` | No | **Full character object from Autofill** — forwarded to AI for consistent character arcs |
+
+> Pass the `characterList` from the Autofill API response directly here. The AI will use the character profiles (name, role, goals, backstory, fears, etc.) to build a story with consistent, grounded character arcs.
 
 ### Response
 ```json
@@ -175,7 +196,9 @@ Takes partial project data and basic character info — returns all fields fully
   "usage": {
     "prompt_tokens": 1240,
     "completion_tokens": 4500,
-    "total_tokens": 5740
+    "total_tokens": 5740,
+    "input_tokens": 1240,
+    "output_tokens": 4500
   }
 }
 ```
@@ -206,12 +229,25 @@ Takes partial project data and basic character info — returns all fields fully
     {
       "name": "Arjun Kumar",
       "role": "MAIN",
-      "description": "A determined village boy who lives for cricket."
-    },
-    {
-      "name": "Vikram Rao",
-      "role": "SECOND_LEAD",
-      "description": "Arjun's mentor, a pragmatic former school cricketer."
+      "description": "A determined village boy who lives for cricket.",
+      "importanceLevel": "Primary",
+      "storySignificance": "The protagonist whose journey drives the story.",
+      "behaviour": "Determined, passionate, occasionally reckless.",
+      "goalInternal": "Prove his worth to his family.",
+      "goalExternal": "Get selected for the national cricket team.",
+      "backstory": "Grew up in poverty, cricket was his only escape.",
+      "struggles": "Self-doubt and financial hardship.",
+      "enneagramType": "3 - The Achiever",
+      "traits": "Hardworking, loyal, impulsive",
+      "coreMotivation": "Recognition and belonging.",
+      "coreValues": "Family, integrity, perseverance.",
+      "coreFear": "Being ordinary.",
+      "ghost": "His father's disappointment after a crucial match loss.",
+      "lie": "He believes he must win alone to matter.",
+      "want": "A place in the national squad.",
+      "need": "To trust others and accept help.",
+      "purposeOfLife": "To inspire his village through sport.",
+      "superObjective": "Represent India on the world stage."
     }
   ]
 }
@@ -222,7 +258,9 @@ Takes partial project data and basic character info — returns all fields fully
 | `story` | Yes | Full story from step 2 |
 | `synopsis` | Yes | Synopsis from step 2 |
 | `projectName` | No | Project title |
-| `characterList` | No | `name`, `role`, `description` only |
+| `characterList` | No | Full character object — same structure as Autofill response |
+
+> `characterList` now accepts the **full character object** from the Autofill API response (all 20+ fields). Only `name` and `role` are strictly needed but the more fields provided, the richer the scenes.
 
 ### Response
 ```json
@@ -234,16 +272,16 @@ Takes partial project data and basic character info — returns all fields fully
     "scenes": [
       {
         "sceneSeq": 1,
-        "slugline": "SCENE 1. EXT. VILLAGE CRICKET FIELD - DAY",
-        "intExt": "EXT.",
-        "dayNight": "DAY",
+        "slugline": "SCENE 1. EXT. VILLAGE CRICKET FIELD – DAY",
+        "int_ext": "EXT.",
+        "day_night": "DAY",
         "location": "VILLAGE CRICKET FIELD",
-        "pagesEighthsEst": "1 2/8",
-        "visualSummary": "Arjun stands on the dusty pitch...",
-        "image": {
-          "prompt": "Cinematic image generation prompt..."
-        },
-        "storyBoardList": []
+        "script_day": "Day 1",
+        "pages_eighths_est": "1 2/8",
+        "visual_summary": "Arjun stands alone on the dusty pitch, gripping a worn cricket ball. The golden afternoon light catches the dust as he winds up for a bowl, his face set with quiet determination.",
+        "voice_over_tone": "Hopeful, introspective",
+        "main_image_prompt": "[Arjun Kumar: lean teenage boy, sun-darkened skin, worn whites] [VILLAGE CRICKET FIELD: dusty red-soil pitch, eucalyptus trees] golden afternoon backlight, wide establishing shot.",
+        "main_video_prompt": "Slow dolly push-in toward Arjun as he releases the ball. Dust rises around his feet. Handheld camera tilts up to reveal the vast empty field behind him."
       }
     ]
   },
@@ -251,22 +289,28 @@ Takes partial project data and basic character info — returns all fields fully
   "usage": {
     "prompt_tokens": 1240,
     "completion_tokens": 4500,
-    "total_tokens": 5740
+    "total_tokens": 5740,
+    "input_tokens": 1240,
+    "output_tokens": 4500
   }
 }
 ```
 
 | Field | Notes |
 |---|---|
-| `sceneSeq` | Scene number |
-| `slugline` | Scene header line |
-| `intExt` | Interior or exterior |
-| `dayNight` | Time of day |
-| `location` | Scene location |
-| `pagesEighthsEst` | Page length estimate |
-| `visualSummary` | What happens on screen |
-| `image.prompt` | Image generation text |
-| `storyBoardList` | Always empty `[]` |
+| `sceneSeq` | Sequential scene number |
+| `slugline` | Scene header — `SCENE #. INT./EXT. LOCATION – DAY/NIGHT` |
+| `int_ext` | `INT.` or `EXT.` |
+| `day_night` | `DAY` / `NIGHT` / `DAWN` / `DUSK` |
+| `location` | Location name in ALL CAPS |
+| `script_day` | Optional script-day estimate |
+| `pages_eighths_est` | Page length e.g. `1 2/8` |
+| `visual_summary` | 3–6 sentence cinematic visual description |
+| `voice_over_tone` | Optional voice-over tone note |
+| `main_image_prompt` | Primary image generation prompt |
+| `main_video_prompt` | Video/motion generation prompt |
+
+> **Removed fields:** `imagePrompt` and `storyBoardList` are no longer returned in the scene treatment response.
 
 > Scene count is AI-determined by story complexity (40–99 scenes). Response time may be 5–15 minutes.
 
@@ -295,7 +339,25 @@ Generates a complete visual asset package containing scene-by-scene image and vi
     {
       "name": "Vikram",
       "role": "MAIN",
-      "description": "Mid-30s, lean but muscular, with a prominent scar on his bowling wrist."
+      "description": "Mid-30s, lean but muscular, with a prominent scar on his bowling wrist.",
+      "importanceLevel": "Primary",
+      "storySignificance": "Vikram's journey of redemption anchors the entire story.",
+      "behaviour": "Pragmatic, disciplined, and strategically sharp.",
+      "goalInternal": "To rediscover his self-worth and courage.",
+      "goalExternal": "To lead the village cricket team to victory.",
+      "backstory": "Once the village's fastest bowler, a wrist injury ended his career.",
+      "struggles": "Guilt, self-doubt, fear of failure in public.",
+      "enneagramType": "1 - The Reformer",
+      "traits": "Disciplined, stubborn, protective",
+      "coreMotivation": "Reclaim dignity for himself and his village.",
+      "coreValues": "Honour, community, resilience.",
+      "coreFear": "Being seen as a failure.",
+      "ghost": "The match he walked away from years ago.",
+      "lie": "He believes his best days are behind him.",
+      "want": "To be left alone.",
+      "need": "To reconnect with his purpose through others.",
+      "purposeOfLife": "To serve his community through sport.",
+      "superObjective": "Restore hope to the village."
     }
   ]
 }
@@ -303,14 +365,14 @@ Generates a complete visual asset package containing scene-by-scene image and vi
 
 | Field | Required | Notes |
 |---|---|---|
-| `visualStyle` | No | Cinematography and visual esthetic |
+| `visualStyle` | No | Cinematography and visual aesthetic |
 | `toneArchetype` | No | Overall tone |
 | `genre` | No | List of genres |
 | `logline` | No | Story logline |
 | `synopsis` | No | Short producer summary |
 | `beatSheet` | No | Major story beats map |
 | `story` | No | Full generated story text |
-| `characterList` | No | List of characters with descriptions |
+| `characterList` | No | **Full character object** — same structure as Autofill response (all 20+ fields) |
 
 > Though technically optional fields, for best results provide the complete story package from the previous generation steps.
 
@@ -336,21 +398,33 @@ Generates a complete visual asset package containing scene-by-scene image and vi
         "appearanceInScenes": [1, 2, 3, 4, 5, 6, 10]
       }
     ],
+    "location_visual_guide": [
+      {
+        "name": "VILLAGE CRICKET PITCH",
+        "description": "A sun-baked red-soil pitch surrounded by eucalyptus trees and weathered wooden stands. Dust rises with every footstep.",
+        "imagePrompt": "Wide-angle shot of a dusty village cricket pitch at golden hour, red soil, sparse wooden stands, eucalyptus trees lining the boundary, dramatic low sun casting long shadows.",
+        "appears_in_scenes": [1, 2, 5, 10, 22, 35]
+      }
+    ],
+    "props_visual_guide": [
+      {
+        "name": "Vikram's Worn Cricket Ball",
+        "description": "A decades-old red leather cricket ball, seams fraying, surface scuffed. A symbol of Vikram's abandoned past.",
+        "imagePrompt": "Macro close-up of a worn red cricket ball on dry cracked earth, leather cracked and seams splitting, dramatic side lighting.",
+        "appears_in_scenes": [1, 8, 19, 40]
+      }
+    ],
     "scenes": [
       {
         "sceneSeq": 1,
         "slugline": "SCENE 1. EXT. VILLAGE CRICKET PITCH – EVENING",
-        "intExt": "EXT.",
-        "dayNight": "EVENING",
+        "int_ext": "EXT.",
+        "day_night": "EVENING",
         "location": "VILLAGE CRICKET PITCH",
-        "pagesEighthsEst": "2/8",
-        "visualSummary": "Vikram stands alone, staring at the rundown cricket pitch...",
-        "image": {
-          "prompt": "[Vikram: mid-30s... in worn cricket gear] [VILLAGE CRICKET PITCH: dusty field] sunset backlighting...",
-          "video": {
-            "prompt": "[Vikram: mid-30s...] [VILLAGE CRICKET PITCH: dusty field] dolly shot moving slowly towards Vikram's face..."
-          }
-        }
+        "pages_eighths_est": "2/8",
+        "visual_summary": "Vikram stands alone, staring at the rundown cricket pitch as the last light fades.",
+        "image_prompt": "[Vikram: mid-30s, lean, worn cricket whites] [VILLAGE CRICKET PITCH: dusty red field, eucalyptus trees] sunset backlighting, wide shot.",
+        "main_video_prompt": "[Vikram] [VILLAGE CRICKET PITCH] dolly shot moving slowly towards Vikram's silhouette as the sun sets behind the boundary trees."
       }
     ]
   },
@@ -358,17 +432,25 @@ Generates a complete visual asset package containing scene-by-scene image and vi
   "usage": {
     "prompt_tokens": 1240,
     "completion_tokens": 4500,
-    "total_tokens": 5740
+    "total_tokens": 5740,
+    "input_tokens": 1240,
+    "output_tokens": 4500
   }
 }
 ```
 
 | Field | Notes |
 |---|---|
-| `characters[].imagePrompt` | Detailed headshot prompt meant for primary character rendering |
-| `characters[].appearanceInScenes` | Array of scene sequences where character appears |
-| `scenes[].image.prompt` | Frame generation prompt combining characters and location |
-| `scenes[].image.video.prompt` | Motion generation video prompt for runway/kling (<1000 chars) |
+| `characters[].imagePrompt` | Detailed headshot prompt for character image generation |
+| `characters[].appearanceInScenes` | Scene sequence numbers where character appears |
+| `location_visual_guide[].description` | Visual/atmospheric description of the location |
+| `location_visual_guide[].imagePrompt` | Image generation prompt for the location |
+| `location_visual_guide[].appears_in_scenes` | Scene sequences where this location is used |
+| `props_visual_guide[].description` | Description and narrative significance of the prop |
+| `props_visual_guide[].imagePrompt` | Image generation prompt for the prop |
+| `props_visual_guide[].appears_in_scenes` | Scene sequences where this prop appears |
+| `scenes[].image_prompt` | Frame generation prompt combining characters and location |
+| `scenes[].main_video_prompt` | Motion/video generation prompt (<1000 chars) |
 
 ---
 
@@ -388,8 +470,6 @@ Generates one image using Vertex AI Imagen, uploads it to storage, and returns a
   "aspectRatio": "16:9",
   "negativePrompt": "blurry, low quality, distorted",
   "sampleCount": 1,
-  "personGeneration": "ALLOW_ALL",
-  "safetySetting": "BLOCK_MEDIUM_AND_ABOVE",
   "addWatermark": false
 }
 ```
@@ -402,10 +482,10 @@ Generates one image using Vertex AI Imagen, uploads it to storage, and returns a
 | `projectName` | No | Metadata/context field |
 | `aspectRatio` | No | Example: `16:9`, `1:1`, `9:16` |
 | `negativePrompt` | No | Undesired elements |
-| `sampleCount` | No | Number of samples to request |
-| `personGeneration` | No | Person policy for generation |
-| `safetySetting` | No | Vertex safety threshold |
-| `addWatermark` | No | Vertex watermark toggle |
+| `sampleCount` | No | Number of samples (default: 1) |
+| `addWatermark` | No | Vertex watermark toggle (default: false) |
+
+> **Removed fields:** `personGeneration` and `safetySetting` are no longer accepted in the request body.
 
 ### Response
 ```json
@@ -689,4 +769,69 @@ Accepts a full structured script/screenplay. Performs a complete end-to-end extr
   }
 }
 ```
+
+---
+
+## 10. Content Blocked — AI Safety Filter Response
+
+When input content triggers Azure OpenAI's content safety filters (e.g. terrorism, extreme violence, adult content), the API does **not** return a `500` error. Instead it returns a structured `200` response with `status: BLOCKED`, surfacing the blocked message inside the existing data fields so the client can display a clear message to the user.
+
+This applies to: **`/autofill`** and **`/story`** endpoints.
+
+### Example — Blocked Story Generation
+
+**Request**
+```json
+{
+  "storyIdea": "Generate a detailed story glorifying extreme violence and illegal terrorist activities.",
+  "genre": ["Action"],
+  "storyStructure": "Three-Act",
+  "narrativeStyle": "Realistic",
+  "creativeNotes": "",
+  "endingType": "Happy",
+  "openingSetupIdea": "",
+  "climaxIdea": "",
+  "pace": "Fast",
+  "toneArchetype": "Dark",
+  "theme": "Conflict",
+  "region": "Global",
+  "targetAudience": ["Adults"],
+  "contentSensitivity": "High",
+  "referenceFilmsWorks": ""
+}
+```
+
+**Response**
+```json
+{
+  "status": "BLOCKED",
+  "message": "Content blocked by AI safety filter",
+  "httpStatus": 200,
+  "data": {
+    "story": "I'm sorry, this story could not be generated due to content sensitivity restrictions imposed by the AI safety system.",
+    "logline": "I'm sorry, this story could not be generated due to content sensitivity restrictions imposed by the AI safety system.",
+    "tone": "",
+    "beatSheet": {},
+    "synopsis": "I'm sorry, this story could not be generated due to content sensitivity restrictions imposed by the AI safety system."
+  },
+  "timestamp": "2026-05-03T05:45:12.063505",
+  "usage": {
+    "prompt_tokens": 3892,
+    "completion_tokens": 5911,
+    "total_tokens": 9803,
+    "input_tokens": 3892,
+    "output_tokens": 5911
+  }
+}
+```
+
+| Field | Value | Notes |
+|---|---|---|
+| `status` | `BLOCKED` | Distinguishes from `SUCCESS` |
+| `httpStatus` | `200` | Not a server error — client must check `status` field |
+| `message` | `Content blocked by AI safety filter` | Human-readable reason |
+| `data.story` / `data.storyIdea` | Blocked message string | Reuses existing field — no new attributes added |
+| `usage` | Populated | Token counts still returned even for blocked calls |
+
+> **How to handle on the client side:** Check the `status` field. If `"BLOCKED"`, display the message from `data.story` (or `data.storyIdea` for autofill) to the user as a content restriction notice. Do **not** treat this as an error — the HTTP status is `200`.
 
