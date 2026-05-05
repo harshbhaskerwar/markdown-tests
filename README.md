@@ -1,6 +1,82 @@
 # Spotlight AI — API Reference
 
-Python AI service covering three workflows: **Autofill**, **Story Generation**, and **Scene Treatment**. All follow the same standard request/response envelope.
+Python AI service exposing **9 endpoints** across two categories:
+- **Text-to-Text Generation** (APIs 1–4): Autofill, Story, Scene, Visual Asset — all use Azure OpenAI.
+- **Media Generation** (APIs 5–6): Single Image (Vertex AI Imagen), Single Video (RunwayML).
+- **Upload Script Processing** (APIs 7–9): File upload → extraction/generation pipeline.
+
+All text-generation APIs return the same `usage` envelope including full Azure content filter metadata.
+
+---
+
+## Usage Object — Standard Format (All Text-Generation APIs)
+
+Every text-generation response (APIs 1–4) includes a `usage` object with the following structure:
+
+```json
+"usage": {
+  "prompt_tokens": 1240,
+  "completion_tokens": 4500,
+  "total_tokens": 5740,
+  "input_tokens": 1240,
+  "output_tokens": 4500,
+  "content_filters": [
+    {
+      "blocked": false,
+      "source_type": "prompt",
+      "content_filter_raw": [],
+      "content_filter_results": {
+        "hate":      { "filtered": false, "severity": "safe" },
+        "sexual":    { "filtered": false, "severity": "safe" },
+        "violence":  { "filtered": false, "severity": "safe" },
+        "self_harm": { "filtered": false, "severity": "safe" },
+        "jailbreak": { "detected": false, "filtered": false }
+      },
+      "content_filter_offsets": {}
+    },
+    {
+      "blocked": false,
+      "source_type": "completion",
+      "content_filter_raw": [],
+      "content_filter_results": {
+        "hate":                    { "filtered": false, "severity": "safe" },
+        "sexual":                  { "filtered": false, "severity": "safe" },
+        "violence":                { "filtered": false, "severity": "safe" },
+        "self_harm":               { "filtered": false, "severity": "safe" },
+        "protected_material_code": { "detected": false, "filtered": false },
+        "protected_material_text": { "detected": false, "filtered": false }
+      },
+      "content_filter_offsets": {}
+    }
+  ],
+  "incomplete_details": null
+}
+```
+
+| Field | Notes |
+|---|---|
+| `prompt_tokens` / `input_tokens` | Same value — tokens consumed by the prompt |
+| `completion_tokens` / `output_tokens` | Same value — tokens in the AI response |
+| `total_tokens` | Sum of prompt + completion |
+| `content_filters` | Azure filter audit per request — always present, even on safe content |
+| `content_filters[].source_type` | `"prompt"` or `"completion"` |
+| `content_filters[].blocked` | `true` only when Azure blocked that source |
+| `incomplete_details` | `null` on success; `{"reason": "content_filter"}` when blocked |
+
+> `content_filters` is populated on every call — it is Azure's audit trail, not just a failure field.
+
+---
+
+## Content Filter Fallback — Standard Behaviour
+
+When Azure OpenAI blocks content generation (hard block via `finish_reason=content_filter`, or soft refusal via a plain-text apology), **all four text-generation APIs return HTTP 200** with `status: "CONTENT_FILTERED"`. The error message is placed inside the primary data field so the frontend can display it without any code changes.
+
+| API | Field carrying the message |
+|---|---|
+| Autofill | `data.storyIdea` |
+| Story | `data.story` |
+| Scene | `data.scenes[0].visual_summary` (single entry) |
+| Visual Asset | `data.visualStyle` |
 
 ---
 
@@ -15,6 +91,7 @@ Takes partial project data and basic character info — returns all fields fully
 {
   "projectName": "The rural village cricket game",
   "storyIdea": "A village boy dreams of playing cricket for India",
+  "sceneCount": 60,
   "genre": ["COMEDY"],
   "narrativeStyle": "COMMERCIAL_MASS_ENTERTAINER",
   "storyStructure": "THREE_ACT",
@@ -24,15 +101,19 @@ Takes partial project data and basic character info — returns all fields fully
   "toneArchetype": "FEEL_GOOD",
   "endingType": "HAPPY_ENDING",
   "region": "Rural India",
+  "cultureRegion": "Rural India",
   "targetAudience": ["FAMILY_ALL_AGES"],
   "referenceFilmsWorks": "Lagaan, Chak De India",
+  "creativeNotes": "Focus on community and family bonds",
   "characterList": [
     {
+      "id": "char-001",
       "name": "Arjun Kumar",
       "role": "MAIN",
       "description": "A determined village boy who lives for cricket."
     },
     {
+      "id": "char-002",
       "name": "Vikram Rao",
       "role": "SECOND_LEAD",
       "description": "Arjun's mentor and former school cricketer."
@@ -41,41 +122,47 @@ Takes partial project data and basic character info — returns all fields fully
 }
 ```
 
-| Field | Notes |
-|---|---|
-| All fields | Optional — send whatever is available |
-| `characterList` | Only `name`, `role`, `description` needed |
-| `role` values | `MAIN` `SECOND_LEAD` `VILLAIN` `SUPPORTING` |
+| Field | Required | Notes |
+|---|---|---|
+| All story fields | No | Send whatever is available — AI fills the rest |
+| `characterList` | No | Only `name`, `role`, `description` needed; AI fills all depth fields |
+| `role` values | — | `MAIN` `SECOND_LEAD` `VILLAIN` `SUPPORTING` |
 
-### Response
+### Response — Success
 ```json
 {
   "status": "SUCCESS",
   "message": "Story parameters auto-filled successfully",
   "httpStatus": 200,
   "data": {
-    "projectName": "...",
+    "projectName": "The rural village cricket game",
     "storyIdea": "...",
+    "sceneCount": 60,
     "genre": ["COMEDY"],
-    "narrativeStyle": "...",
-    "storyStructure": "...",
-    "endingType": "...",
+    "narrativeStyle": "COMMERCIAL_MASS_ENTERTAINER",
+    "storyStructure": "THREE_ACT",
+    "endingType": "HAPPY_ENDING",
     "openingSetupIdea": "...",
     "climaxIdea": "...",
-    "pace": "...",
-    "toneArchetype": "...",
-    "theme": "...",
-    "region": "...",
-    "targetAudience": ["..."],
-    "contentSensitivity": "...",
-    "referenceFilmsWorks": "...",
+    "pace": "BALANCED_NARRATIVE",
+    "toneArchetype": "FEEL_GOOD",
+    "theme": "FAMILY_AND_BELONGING",
+    "region": "Rural India",
+    "targetAudience": ["FAMILY_ALL_AGES"],
+    "contentSensitivity": "CLEAN_FAMILY_SAFE",
+    "referenceFilmsWorks": "Lagaan, Chak De India",
     "characterList": [
       {
+        "id": "char-001",
         "name": "Arjun Kumar",
         "role": "MAIN",
         "description": "...",
-        "importanceLevel": "...",
+        "importanceLevel": "Primary",
         "storySignificance": "...",
+        "style": "",
+        "imagePrompt": "",
+        "imageUrl": "",
+        "aspectRatio": "",
         "behaviour": "...",
         "goalInternal": "...",
         "goalExternal": "...",
@@ -91,25 +178,29 @@ Takes partial project data and basic character info — returns all fields fully
         "want": "...",
         "need": "...",
         "purposeOfLife": "...",
-        "superObjective": "..."
+        "superObjective": "...",
+        "appearanceInScenes": [],
+        "createdBy": "",
+        "updatedBy": "",
+        "createdOn": "",
+        "updatedOn": "",
+        "deletedAt": "",
+        "deleted": false,
+        "isDeleted": false
       }
     ]
   },
-  "timestamp": "2026-04-19T14:31:38.123456",
-  "usage": {
-    "prompt_tokens": 1240,
-    "completion_tokens": 4500,
-    "total_tokens": 5740,
-    "input_tokens": 1240,
-    "output_tokens": 4500
-  }
+  "timestamp": "2026-05-05T14:31:38.123456+00:00",
+  "usage": { "...see Usage Object above..." }
 }
 ```
 
 | Field | Notes |
 |---|---|
 | All story fields | Completed/corrected by AI |
-| `characterList` | Full character depth — all 20 fields filled |
+| `characterList` | Full character depth — all fields filled; passthrough DB fields echoed unchanged |
+| `isDeleted` | Always `false` |
+| `appearanceInScenes` | Always `[]` from Autofill — populated by Visual Asset API |
 
 ---
 
@@ -135,18 +226,25 @@ Takes partial project data and basic character info — returns all fields fully
   "creativeNotes": "Focus on community and family bonds",
   "characterList": [
     {
+      "id": "char-001",
       "name": "Arjun Kumar",
       "role": "MAIN",
-      "description": "A determined village boy who lives for cricket.",
-      "goalInternal": "Prove his worth to his family.",
-      "goalExternal": "Get selected for the national cricket team.",
-      "backstory": "Grew up in poverty, cricket was his only escape.",
-      "coreMotivation": "Recognition and belonging.",
-      "coreFear": "Being ordinary.",
-      "ghost": "His father's disappointment after a crucial match loss.",
-      "lie": "He believes he must win alone to matter.",
-      "want": "A place in the national squad.",
-      "need": "To trust others and accept help."
+      "behaviour": "...",
+      "goalExternal": "...",
+      "goalInternal": "...",
+      "backstory": "...",
+      "struggles": "...",
+      "enneagramType": "...",
+      "traits": "...",
+      "coreFear": "...",
+      "coreMotivation": "...",
+      "coreValues": "...",
+      "lie": "...",
+      "ghost": "...",
+      "want": "...",
+      "need": "...",
+      "purposeOfLife": "...",
+      "superObjective": "..."
     }
   ]
 }
@@ -166,49 +264,87 @@ Takes partial project data and basic character info — returns all fields fully
 | `region` | No | Cultural setting |
 | `targetAudience` | No | Intended viewers |
 | `referenceFilmsWorks` | No | Style references |
-| `creativeNotes` | No | Extra direction |
-| `characterList` | No | **Full character object from Autofill** — forwarded to AI for consistent character arcs |
+| `creativeNotes` | No | Extra creative direction |
+| `characterList` | No | Full character objects from Autofill response — richer characters = richer story |
 
-> Pass the `characterList` from the Autofill API response directly here. The AI will use the character profiles (name, role, goals, backstory, fears, etc.) to build a story with consistent, grounded character arcs.
-
-### Response
+### Response — Case A: Success
 ```json
 {
   "status": "SUCCESS",
   "message": "Story generated successfully",
   "httpStatus": 200,
   "data": {
-    "story": "Full scriptment 3000-4000 words...",
-    "logline": "One line — character, conflict, stakes.",
-    "tone": "Emotional atmosphere description.",
+    "story": "Full scriptment 3000–4000 words, active present tense, no dialogue...",
+    "logline": "One sentence — actual character name, conflict, and stakes.",
+    "tone": "Emotional atmosphere and cinematic style description.",
     "beatSheet": {
-      "1. Setup": "...",
-      "2. Inciting Incident": "...",
-      "3. First Turning Point": "...",
-      "4. Midpoint": "...",
-      "5. All Is Lost": "...",
-      "6. Climax": "...",
-      "7. Resolution": "..."
+      "1. Opening Image": "...",
+      "2. Catalyst": "...",
+      "3. Midpoint": "...",
+      "4. All Is Lost": "...",
+      "5. Finale": "..."
     },
-    "synopsis": "1-3 paragraph producer summary."
+    "synopsis": "1–3 paragraph producer-facing story summary."
   },
-  "timestamp": "2026-04-19T14:31:38.123456",
+  "timestamp": "2026-05-05T14:31:38.123456",
+  "usage": { "...see Usage Object above..." }
+}
+```
+
+### Response — Case B: Content Filtered (blocked input)
+
+When Azure OpenAI refuses to generate content (e.g. terrorism, explicit violence, harmful synthesis instructions), the API returns HTTP 200 with the following structure — **no new fields; the error message appears in `data.story`**:
+
+```json
+{
+  "status": "CONTENT_FILTERED",
+  "message": "Story generated successfully",
+  "httpStatus": 200,
+  "data": {
+    "story": "We're sorry, this content could not be generated as it may involve sensitive or restricted themes. Please review your inputs and try again with a different topic.",
+    "logline": "",
+    "tone": "",
+    "beatSheet": {},
+    "synopsis": ""
+  },
+  "timestamp": "2026-05-05T16:52:08.686556",
   "usage": {
-    "prompt_tokens": 1240,
-    "completion_tokens": 4500,
-    "total_tokens": 5740,
-    "input_tokens": 1240,
-    "output_tokens": 4500
+    "prompt_tokens": 3924,
+    "completion_tokens": 10,
+    "total_tokens": 3934,
+    "input_tokens": 3924,
+    "output_tokens": 10,
+    "content_filters": [
+      {
+        "blocked": true,
+        "source_type": "completion",
+        "content_filter_raw": [],
+        "content_filter_results": {},
+        "content_filter_offsets": {}
+      }
+    ],
+    "incomplete_details": { "reason": "content_filter" }
   }
 }
 ```
 
 | Field | Notes |
 |---|---|
-| `story` | Full scriptment, no dialogue |
-| `logline` | One sentence summary |
+| `status` | `"CONTENT_FILTERED"` — Java/frontend can branch on this |
+| `data.story` | Contains the user-facing error message |
+| `data.logline` / `tone` / `synopsis` | Empty string `""` |
+| `data.beatSheet` | Empty object `{}` |
+| `usage.incomplete_details.reason` | Always `"content_filter"` when blocked |
+| `usage.content_filters[].blocked` | `true` for the source that was blocked |
+
+> **Note:** The `message` envelope field stays at its standard value — `status` is the signal for routing logic.
+
+| Field | Notes |
+|---|---|
+| `story` | Full scriptment, no dialogue, active present tense |
+| `logline` | One sentence with actual character name |
 | `tone` | Cinematic mood/style |
-| `beatSheet` | Key plot beats as object |
+| `beatSheet` | Key plot beats as object with beat titles as keys |
 | `synopsis` | Short producer summary |
 
 ---
@@ -223,31 +359,20 @@ Takes partial project data and basic character info — returns all fields fully
 ```json
 {
   "projectName": "The rural village cricket game",
-  "story": "<story from step 2>",
+  "story": "<full story text from step 2>",
   "synopsis": "<synopsis from step 2>",
   "characterList": [
     {
+      "id": "char-001",
       "name": "Arjun Kumar",
       "role": "MAIN",
-      "description": "A determined village boy who lives for cricket.",
-      "importanceLevel": "Primary",
-      "storySignificance": "The protagonist whose journey drives the story.",
-      "behaviour": "Determined, passionate, occasionally reckless.",
-      "goalInternal": "Prove his worth to his family.",
-      "goalExternal": "Get selected for the national cricket team.",
-      "backstory": "Grew up in poverty, cricket was his only escape.",
-      "struggles": "Self-doubt and financial hardship.",
-      "enneagramType": "3 - The Achiever",
-      "traits": "Hardworking, loyal, impulsive",
-      "coreMotivation": "Recognition and belonging.",
-      "coreValues": "Family, integrity, perseverance.",
-      "coreFear": "Being ordinary.",
-      "ghost": "His father's disappointment after a crucial match loss.",
-      "lie": "He believes he must win alone to matter.",
-      "want": "A place in the national squad.",
-      "need": "To trust others and accept help.",
-      "purposeOfLife": "To inspire his village through sport.",
-      "superObjective": "Represent India on the world stage."
+      "description": "A determined village boy who lives for cricket."
+    },
+    {
+      "id": "char-002",
+      "name": "Vikram Rao",
+      "role": "SECOND_LEAD",
+      "description": "Arjun's mentor, a pragmatic former school cricketer."
     }
   ]
 }
@@ -258,11 +383,9 @@ Takes partial project data and basic character info — returns all fields fully
 | `story` | Yes | Full story from step 2 |
 | `synopsis` | Yes | Synopsis from step 2 |
 | `projectName` | No | Project title |
-| `characterList` | No | Full character object — same structure as Autofill response |
+| `characterList` | No | `name`, `role`, `description` only needed |
 
-> `characterList` now accepts the **full character object** from the Autofill API response (all 20+ fields). Only `name` and `role` are strictly needed but the more fields provided, the richer the scenes.
-
-### Response
+### Response — Success
 ```json
 {
   "status": "SUCCESS",
@@ -272,47 +395,81 @@ Takes partial project data and basic character info — returns all fields fully
     "scenes": [
       {
         "sceneSeq": 1,
-        "slugline": "SCENE 1. EXT. VILLAGE CRICKET FIELD – DAY",
+        "slugline": "1. EXT. VILLAGE CRICKET FIELD – DAY",
         "int_ext": "EXT.",
         "day_night": "DAY",
         "location": "VILLAGE CRICKET FIELD",
-        "script_day": "Day 1",
+        "script_day": "",
         "pages_eighths_est": "1 2/8",
-        "visual_summary": "Arjun stands alone on the dusty pitch, gripping a worn cricket ball. The golden afternoon light catches the dust as he winds up for a bowl, his face set with quiet determination.",
-        "voice_over_tone": "Hopeful, introspective",
-        "main_image_prompt": "[Arjun Kumar: lean teenage boy, sun-darkened skin, worn whites] [VILLAGE CRICKET FIELD: dusty red-soil pitch, eucalyptus trees] golden afternoon backlight, wide establishing shot.",
-        "main_video_prompt": "Slow dolly push-in toward Arjun as he releases the ball. Dust rises around his feet. Handheld camera tilts up to reveal the vast empty field behind him."
+        "visual_summary": "Arjun stands on the dusty pitch, bat raised, eyes fixed on the horizon. The village crowd watches silently. He swings — the ball arcs against a gold sky. Something shifts in the air: a boy has found his moment.",
+        "voice_over_tone": "",
+        "slugline": "1. EXT. VILLAGE CRICKET FIELD – DAY",
+        "image_prompt": "[Arjun: teenage boy, lean, dusty cricket whites] [VILLAGE CRICKET FIELD: sun-baked earth, thatched huts behind the boundary rope] golden-hour backlighting, wide lens.",
+        "main_image_prompt": "[Arjun: teenage boy, lean, dusty cricket whites] [VILLAGE CRICKET FIELD: sun-baked earth, thatched huts] wide establishing shot, warm tones.",
+        "main_video_prompt": "Slow push-in on Arjun at the crease, crowd in soft focus behind him, dust rising as he swings, camera follows the ball arc against the sky.",
+        "storyBoardList": []
       }
     ]
   },
-  "timestamp": "2026-04-19T14:31:38.123456",
-  "usage": {
-    "prompt_tokens": 1240,
-    "completion_tokens": 4500,
-    "total_tokens": 5740,
-    "input_tokens": 1240,
-    "output_tokens": 4500
-  }
+  "timestamp": "2026-05-05T14:31:38.123456",
+  "usage": { "...see Usage Object above..." }
 }
 ```
 
 | Field | Notes |
 |---|---|
-| `sceneSeq` | Sequential scene number |
-| `slugline` | Scene header — `SCENE #. INT./EXT. LOCATION – DAY/NIGHT` |
-| `int_ext` | `INT.` or `EXT.` |
-| `day_night` | `DAY` / `NIGHT` / `DAWN` / `DUSK` |
-| `location` | Location name in ALL CAPS |
-| `script_day` | Optional script-day estimate |
-| `pages_eighths_est` | Page length e.g. `1 2/8` |
-| `visual_summary` | 3–6 sentence cinematic visual description |
-| `voice_over_tone` | Optional voice-over tone note |
-| `main_image_prompt` | Primary image generation prompt |
-| `main_video_prompt` | Video/motion generation prompt |
+| `sceneSeq` | Sequential scene number (integer) |
+| `slugline` | Full scene header in ALL CAPS |
+| `int_ext` | `"INT."` or `"EXT."` |
+| `day_night` | `"DAY"` / `"NIGHT"` / `"DUSK"` / `"DAWN"` / `"EVENING"` |
+| `location` | Location name from slugline |
+| `script_day` | Story day number — `""` if not stated |
+| `pages_eighths_est` | Page length e.g. `"1 2/8"`, `"3/8"` |
+| `visual_summary` | 3–6 sentence cinematic description, no dialogue |
+| `voice_over_tone` | VO tone note — `""` if not applicable |
+| `image_prompt` | Character + location bracketed image prompt |
+| `main_image_prompt` | Primary frame image prompt for Vertex AI |
+| `main_video_prompt` | Motion prompt for RunwayML (<1000 chars) |
+| `storyBoardList` | Always `[]` — Java populates this |
 
-> **Removed fields:** `imagePrompt` and `storyBoardList` are no longer returned in the scene treatment response.
+> Scene count is AI-determined by story complexity (minimum 40, maximum 99 scenes). Response time may be **10–20 minutes** for longer stories.
 
-> Scene count is AI-determined by story complexity (40–99 scenes). Response time may be 5–15 minutes.
+### Response — Content Filtered
+```json
+{
+  "status": "CONTENT_FILTERED",
+  "message": "Scene treatment generated successfully",
+  "httpStatus": 200,
+  "data": {
+    "scenes": [
+      {
+        "sceneSeq": 1,
+        "slugline": "",
+        "int_ext": "",
+        "day_night": "",
+        "location": "",
+        "script_day": "",
+        "pages_eighths_est": "",
+        "visual_summary": "We're sorry, this content could not be generated as it may involve sensitive or restricted themes. Please review your inputs and try again with a different topic.",
+        "voice_over_tone": "",
+        "image_prompt": "",
+        "main_image_prompt": "",
+        "main_video_prompt": "",
+        "storyBoardList": []
+      }
+    ]
+  },
+  "timestamp": "2026-05-05T14:31:38.123456",
+  "usage": {
+    "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+    "input_tokens": 0, "output_tokens": 0,
+    "content_filters": [
+      { "blocked": true, "source_type": "completion", "content_filter_raw": [], "content_filter_results": {}, "content_filter_offsets": {} }
+    ],
+    "incomplete_details": { "reason": "content_filter" }
+  }
+}
+```
 
 ---
 
@@ -320,44 +477,37 @@ Takes partial project data and basic character info — returns all fields fully
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/visual-asset`
 
-Generates a complete visual asset package containing scene-by-scene image and video prompts, as well as comprehensive character visual guides.
+Generates a complete visual asset package: scene-level image and video prompts, full character visual guides, location guides, and prop guides — all created by AI from the story package.
 
 ### Request
 ```json
 {
-  "visualStyle": "Dusty Village Evenings, High Contrast Sunsets, Gritty Sports Action",
+  "visualStyle": "Warm golden-hour cinematography, dusty earth tones, handheld during matches, locked-off wides for introspection.",
   "toneArchetype": "INSPIRATIONAL_DRAMA",
   "genre": ["DRAMA", "SPORTS"],
-  "logline": "A former star bowler in a remote village must rediscover his courage to lead a ragtag cricket team against a corrupt landlord's dominance.",
-  "synopsis": "Vikram, once the village's fastest bowler...",
+  "logline": "A disgraced cricket legend finds redemption coaching a village underdog team to the national championship.",
+  "synopsis": "Set in rural Maharashtra...",
   "beatSheet": {
-      "1. Setup": "...",
-      "2. Inciting Incident": "..."
+    "1. Opening Image": "...",
+    "2. Catalyst": "..."
   },
   "story": "Full story text here...",
   "characterList": [
     {
-      "name": "Vikram",
+      "name": "Arjun Kapoor",
       "role": "MAIN",
-      "description": "Mid-30s, lean but muscular, with a prominent scar on his bowling wrist.",
+      "description": "Retired cricket legend, stoic, carries deep guilt.",
       "importanceLevel": "Primary",
-      "storySignificance": "Vikram's journey of redemption anchors the entire story.",
-      "behaviour": "Pragmatic, disciplined, and strategically sharp.",
-      "goalInternal": "To rediscover his self-worth and courage.",
-      "goalExternal": "To lead the village cricket team to victory.",
-      "backstory": "Once the village's fastest bowler, a wrist injury ended his career.",
-      "struggles": "Guilt, self-doubt, fear of failure in public.",
-      "enneagramType": "1 - The Reformer",
-      "traits": "Disciplined, stubborn, protective",
-      "coreMotivation": "Reclaim dignity for himself and his village.",
-      "coreValues": "Honour, community, resilience.",
-      "coreFear": "Being seen as a failure.",
-      "ghost": "The match he walked away from years ago.",
-      "lie": "He believes his best days are behind him.",
-      "want": "To be left alone.",
-      "need": "To reconnect with his purpose through others.",
-      "purposeOfLife": "To serve his community through sport.",
-      "superObjective": "Restore hope to the village."
+      "storySignificance": "Protagonist — redemption arc is the emotional spine.",
+      "behaviour": "...",
+      "goalInternal": "...",
+      "goalExternal": "...",
+      "backstory": "...",
+      "struggles": "...",
+      "coreMotivation": "...",
+      "coreFear": "...",
+      "traits": "...",
+      "enneagramType": "Type 1 — The Reformer"
     }
   ]
 }
@@ -367,90 +517,121 @@ Generates a complete visual asset package containing scene-by-scene image and vi
 |---|---|---|
 | `visualStyle` | No | Cinematography and visual aesthetic |
 | `toneArchetype` | No | Overall tone |
-| `genre` | No | List of genres |
+| `genre` | No | Array of genres |
 | `logline` | No | Story logline |
 | `synopsis` | No | Short producer summary |
 | `beatSheet` | No | Major story beats map |
 | `story` | No | Full generated story text |
-| `characterList` | No | **Full character object** — same structure as Autofill response (all 20+ fields) |
+| `characterList` | No | Full character objects — richer input = richer visual output |
 
-> Though technically optional fields, for best results provide the complete story package from the previous generation steps.
+> For best results provide the complete story package from the previous generation steps.
 
-### Response
+### Response — Success
 ```json
 {
   "status": "SUCCESS",
   "message": "Visual asset data generated successfully",
   "httpStatus": 200,
   "data": {
-    "visualStyle": "Dusty Village Evenings...",
+    "visualStyle": "Warm golden-hour cinematography, dusty earth tones...",
     "characters": [
       {
-        "name": "Vikram",
-        "description": "Mid-30s, lean but muscular build...",
-        "importanceLevel": "Primary",
-        "storySignificance": "Vikram's journey of redemption...",
-        "imagePrompt": "Vikram headshot: mid-30s, lean but muscular... golden-hour hard key light.",
-        "behaviour": "Pragmatic, disciplined, and strategically sharp",
+        "name": "Arjun Kapoor",
         "role": "MAIN",
-        "goalInternal": "To rediscover his self-worth...",
-        "goalExternal": "To lead the cricket team...",
-        "appearanceInScenes": [1, 2, 3, 4, 5, 6, 10]
-      }
-    ],
-    "location_visual_guide": [
-      {
-        "name": "VILLAGE CRICKET PITCH",
-        "description": "A sun-baked red-soil pitch surrounded by eucalyptus trees and weathered wooden stands. Dust rises with every footstep.",
-        "imagePrompt": "Wide-angle shot of a dusty village cricket pitch at golden hour, red soil, sparse wooden stands, eucalyptus trees lining the boundary, dramatic low sun casting long shadows.",
-        "appears_in_scenes": [1, 2, 5, 10, 22, 35]
-      }
-    ],
-    "props_visual_guide": [
-      {
-        "name": "Vikram's Worn Cricket Ball",
-        "description": "A decades-old red leather cricket ball, seams fraying, surface scuffed. A symbol of Vikram's abandoned past.",
-        "imagePrompt": "Macro close-up of a worn red cricket ball on dry cracked earth, leather cracked and seams splitting, dramatic side lighting.",
-        "appears_in_scenes": [1, 8, 19, 40]
+        "description": "Retired cricket legend, stoic, carries deep guilt.",
+        "importanceLevel": "Primary",
+        "storySignificance": "Protagonist — redemption arc is the emotional spine.",
+        "imagePrompt": "Arjun Kapoor headshot: mid-50s, weathered face, short greying hair, worn polo shirt, tired but dignified eyes — golden-hour hard key light, shallow depth of field.",
+        "behaviour": "...",
+        "goalInternal": "...",
+        "goalExternal": "...",
+        "backstory": "...",
+        "struggles": "...",
+        "enneagramType": "Type 1 — The Reformer",
+        "traits": "...",
+        "coreMotivation": "...",
+        "coreValues": "...",
+        "coreFear": "...",
+        "ghost": "...",
+        "lie": "...",
+        "want": "...",
+        "need": "...",
+        "purposeOfLife": "...",
+        "superObjective": "...",
+        "appearanceInScenes": [1, 2, 3, 5, 8, 12, 15]
       }
     ],
     "scenes": [
       {
         "sceneSeq": 1,
-        "slugline": "SCENE 1. EXT. VILLAGE CRICKET PITCH – EVENING",
-        "int_ext": "EXT.",
-        "day_night": "EVENING",
-        "location": "VILLAGE CRICKET PITCH",
+        "slugline": "INT. ARJUN'S STUDY – DUSK",
+        "int_ext": "INT.",
+        "day_night": "DUSK",
+        "location": "ARJUN'S STUDY",
         "pages_eighths_est": "2/8",
-        "visual_summary": "Vikram stands alone, staring at the rundown cricket pitch as the last light fades.",
-        "image_prompt": "[Vikram: mid-30s, lean, worn cricket whites] [VILLAGE CRICKET PITCH: dusty red field, eucalyptus trees] sunset backlighting, wide shot.",
-        "main_video_prompt": "[Vikram] [VILLAGE CRICKET PITCH] dolly shot moving slowly towards Vikram's silhouette as the sun sets behind the boundary trees."
+        "visual_summary": "Arjun sits alone, surrounded by dusty trophies...",
+        "image_prompt": "[Arjun Kapoor: mid-50s, greying hair, worn polo] [ARJUN'S STUDY: dim room, dusty cricket trophies, single overhead bulb] melancholic warm light, shallow depth of field.",
+        "main_image_prompt": "[Arjun Kapoor: mid-50s, greying hair, worn polo] [ARJUN'S STUDY: dim, dusty trophies] cinematic establishing frame, warm amber tones.",
+        "main_video_prompt": "Slow push-in on Arjun seated at his desk, trophies in soft focus behind him, dust motes drifting in the single beam of light, melancholic atmosphere.",
+        "storyBoardList": []
+      }
+    ],
+    "location_visual_guide": [
+      {
+        "name": "ARJUN'S STUDY",
+        "description": "Dim, cluttered study with dusty cricket trophies and muted lighting — a stark contrast to past glory.",
+        "imagePrompt": "A dim study with dusty cricket trophies on shelves, single overhead bulb, worn desk, warm amber shadows, atmosphere of quiet neglect.",
+        "appears_in_scenes": [1, 2]
+      }
+    ],
+    "props_visual_guide": [
+      {
+        "name": "CRICKET BAT",
+        "description": "Riya's father's old bat — cracked and aged, a tangible connection to her past.",
+        "imagePrompt": "A cracked, aged cricket bat with worn grip, showing years of use, warm studio light, isolated on neutral background.",
+        "appears_in_scenes": [5, 18]
       }
     ]
   },
-  "timestamp": "2026-04-26T14:54:43.641547",
-  "usage": {
-    "prompt_tokens": 1240,
-    "completion_tokens": 4500,
-    "total_tokens": 5740,
-    "input_tokens": 1240,
-    "output_tokens": 4500
-  }
+  "timestamp": "2026-05-05T14:31:38.123456",
+  "usage": { "...see Usage Object above..." }
 }
 ```
 
 | Field | Notes |
 |---|---|
-| `characters[].imagePrompt` | Detailed headshot prompt for character image generation |
-| `characters[].appearanceInScenes` | Scene sequence numbers where character appears |
-| `location_visual_guide[].description` | Visual/atmospheric description of the location |
-| `location_visual_guide[].imagePrompt` | Image generation prompt for the location |
-| `location_visual_guide[].appears_in_scenes` | Scene sequences where this location is used |
-| `props_visual_guide[].description` | Description and narrative significance of the prop |
-| `props_visual_guide[].imagePrompt` | Image generation prompt for the prop |
-| `props_visual_guide[].appears_in_scenes` | Scene sequences where this prop appears |
-| `scenes[].image_prompt` | Frame generation prompt combining characters and location |
-| `scenes[].main_video_prompt` | Motion/video generation prompt (<1000 chars) |
+| `characters[].imagePrompt` | Detailed headshot prompt for primary character rendering (Vertex AI) |
+| `characters[].appearanceInScenes` | Scene sequence numbers where this character appears |
+| `scenes[].image_prompt` | Bracketed character + location frame prompt |
+| `scenes[].main_image_prompt` | Primary image generation prompt |
+| `scenes[].main_video_prompt` | RunwayML motion prompt — always under 1000 characters |
+| `location_visual_guide[].appears_in_scenes` | Scene numbers where this location is used |
+| `props_visual_guide[].appears_in_scenes` | Scene numbers where this prop appears |
+
+### Response — Content Filtered
+```json
+{
+  "status": "CONTENT_FILTERED",
+  "message": "Visual asset data generated successfully",
+  "httpStatus": 200,
+  "data": {
+    "visualStyle": "We're sorry, this content could not be generated as it may involve sensitive or restricted themes. Please review your inputs and try again with a different topic.",
+    "characters": [],
+    "scenes": [],
+    "location_visual_guide": [],
+    "props_visual_guide": []
+  },
+  "timestamp": "2026-05-05T14:31:38.123456",
+  "usage": {
+    "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+    "input_tokens": 0, "output_tokens": 0,
+    "content_filters": [
+      { "blocked": true, "source_type": "completion", "content_filter_raw": [], "content_filter_results": {}, "content_filter_offsets": {} }
+    ],
+    "incomplete_details": { "reason": "content_filter" }
+  }
+}
+```
 
 ---
 
@@ -458,34 +639,36 @@ Generates a complete visual asset package containing scene-by-scene image and vi
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/generate-single-image`
 
-Generates one image using Vertex AI Imagen, uploads it to storage, and returns a 7-day presigned URL.
+Generates one image using Vertex AI Imagen 3, uploads to Yotta/S3, and returns a 7-day presigned URL.
 
 ### Request
 ```json
 {
   "id": "922f5425-2284-410c-897b-6f4c4d215f65",
-  "prompt": "Aion headshot: mid-30s, fair-olive complexion, short cropped dark hair, clean-lined neutral tunic.",
+  "prompt": "Arjun headshot: mid-50s, weathered face, short greying hair, worn polo shirt, tired but dignified eyes.",
   "visualStyle": "CINEMATIC",
-  "projectName": "Visual Asset Project",
+  "projectName": "The Last Innings",
   "aspectRatio": "16:9",
   "negativePrompt": "blurry, low quality, distorted",
   "sampleCount": 1,
+  "personGeneration": "ALLOW_ALL",
+  "safetySetting": "BLOCK_MEDIUM_AND_ABOVE",
   "addWatermark": false
 }
 ```
 
 | Field | Required | Notes |
 |---|---|---|
-| `id` | Yes | Asset identifier used in output filename |
+| `id` | Yes | Asset identifier — used in output filename |
 | `prompt` | Yes | Base image prompt text |
-| `visualStyle` | No | Appended as `in exact <style> style` |
+| `visualStyle` | No | Appended to prompt as `in exact <style> style` |
 | `projectName` | No | Metadata/context field |
-| `aspectRatio` | No | Example: `16:9`, `1:1`, `9:16` |
+| `aspectRatio` | No | `16:9` `1:1` `9:16` `4:3` `3:4` |
 | `negativePrompt` | No | Undesired elements |
-| `sampleCount` | No | Number of samples (default: 1) |
-| `addWatermark` | No | Vertex watermark toggle (default: false) |
-
-> **Removed fields:** `personGeneration` and `safetySetting` are no longer accepted in the request body.
+| `sampleCount` | No | Number of samples (1–4) |
+| `personGeneration` | No | `ALLOW_ALL` `ALLOW_ADULT` `DONT_ALLOW` |
+| `safetySetting` | No | Vertex safety threshold |
+| `addWatermark` | No | Vertex watermark toggle |
 
 ### Response
 ```json
@@ -511,21 +694,21 @@ Generates one image using Vertex AI Imagen, uploads it to storage, and returns a
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/generate-single-video`
 
-Generates one video using Runway Gen-4 Turbo from a source image URL, uploads to storage, and returns a 7-day presigned URL.
+Generates one video using RunwayML Gen-4 Turbo (image-to-video), uploads to Yotta/S3, and returns a 7-day presigned URL.
 
 ### Request
 ```json
 {
   "id": "6aa2cac2-ba52-443c-8813-b6ef8c43e515",
   "prompt": "Camera slowly pushes in as wind moves through the field and dust rises.",
-  "imageUrl": "https://nm1ecs.yotta.com:9021/previsualization/text-image/image_cea626dd-a9e5-46eb-b0ac-2a4d24927b48.png?...",
-  "projectName": "Visual Asset Project"
+  "imageUrl": "https://nm1ecs.yotta.com:9021/previsualization/text-image/image_922f5425.png?...",
+  "projectName": "The Last Innings"
 }
 ```
 
 | Field | Required | Notes |
 |---|---|---|
-| `id` | Yes | Asset identifier used in output filename |
+| `id` | Yes | Asset identifier — used in output filename |
 | `prompt` | Yes | Motion/video prompt |
 | `imageUrl` | Yes | Source image URL (presigned or public) |
 | `projectName` | No | Metadata/context field |
@@ -550,7 +733,7 @@ Generates one video using Runway Gen-4 Turbo from a source image URL, uploads to
 
 ---
 
-## Errors
+## Error Reference
 
 ```json
 { "error": "HTTP_ERROR", "message": "Reason here" }
@@ -558,14 +741,16 @@ Generates one video using Runway Gen-4 Turbo from a source image URL, uploads to
 
 | Code | Meaning |
 |---|---|
-| `422` | Missing required field |
-| `500` | AI generation failed |
+| `422` | Missing required field or content blocked by Azure (pitch-deck endpoint only) |
+| `500` | AI generation failed — unexpected error |
+
+> Text-generation APIs (1–4) never return 500 for content filtering — they return HTTP 200 with `status: "CONTENT_FILTERED"` instead.
 
 ---
 
 # UPLOAD SCRIPT APIs (File Processing)
 
-These three endpoints accept a PDF or DOCX file via `multipart/form-data` and automatically extract or generate the necessary data for the Spotlight application. They are distinct from the standard generation APIs as they ingest user files directly.
+These three endpoints accept a PDF or DOCX file via `multipart/form-data` and automatically extract or generate the necessary data for the Spotlight application.
 
 ## 7. Process Synopsis (One-Liner)
 
@@ -577,7 +762,7 @@ Accepts a short idea or synopsis. Automatically extracts and generates character
 ### Request (multipart/form-data)
 | Field | Type | Notes |
 |---|---|---|
-| `file` | File | The synopsis document (PDF/DOCX) |
+| `file` | File | Synopsis document (PDF/DOCX/TXT) |
 
 ### Response
 ```json
@@ -590,9 +775,7 @@ Accepts a short idea or synopsis. Automatically extracts and generates character
   "processingMode": "GENERATION",
   "suggestedStopScreen": 1,
   "primaryLanding": "AUTOFILL_CORE_DETAILS",
-  "screenScores": {
-    "screen1": 100
-  },
+  "screenScores": { "screen1": 100 },
   "data": {
     "autoFill": {
       "projectName": "The Last Signal",
@@ -609,13 +792,6 @@ Accepts a short idea or synopsis. Automatically extracts and generates character
           "role": "PROTAGONIST",
           "description": "...",
           "traits": ["INTELLIGENT", "DETERMINED"]
-        },
-        {
-          "name": "Director Hayes",
-          "importanceLevel": "SUPPORTING",
-          "role": "ANTAGONIST",
-          "description": "...",
-          "traits": ["RUTHLESS", "AUTHORITATIVE"]
         }
       ]
     }
@@ -634,13 +810,13 @@ Accepts a short idea or synopsis. Automatically extracts and generates character
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/process/story`
 
-Accepts a prose narrative or treatment. Extracts core details and builds a beat sheet, while preserving the original story verbatim.
+Accepts a prose narrative or treatment. Extracts core details and builds a beat sheet while preserving the original story verbatim.
 **Fills Screen 1 + Screen 2 (AutoFill & Generate Story).** Scene treatment is NOT generated automatically.
 
 ### Request (multipart/form-data)
 | Field | Type | Notes |
 |---|---|---|
-| `file` | File | The story document (PDF/DOCX) |
+| `file` | File | Story document (PDF/DOCX/TXT) |
 
 ### Response
 ```json
@@ -653,25 +829,14 @@ Accepts a prose narrative or treatment. Extracts core details and builds a beat 
   "processingMode": "EXTRACTION",
   "suggestedStopScreen": 2,
   "primaryLanding": "GENERATE_STORY",
-  "screenScores": {
-    "screen1": 100,
-    "screen2": 100
-  },
+  "screenScores": { "screen1": 100, "screen2": 100 },
   "data": {
     "autoFill": {
       "projectName": "THE BRIDGE BETWEEN US",
       "genre": ["DRAMA"],
       "characterList": [
-        {
-          "name": "Arjun Mehta",
-          "importanceLevel": "LEAD",
-          "role": "PROTAGONIST"
-        },
-        {
-          "name": "Ramesh Mehta",
-          "importanceLevel": "SUPPORTING",
-          "role": "MENTOR"
-        }
+        { "name": "Arjun Mehta", "importanceLevel": "LEAD", "role": "PROTAGONIST" },
+        { "name": "Ramesh Mehta", "importanceLevel": "SUPPORTING", "role": "MENTOR" }
       ]
     },
     "generateStory": {
@@ -694,13 +859,13 @@ Accepts a prose narrative or treatment. Extracts core details and builds a beat 
 
 **POST** `https://dev-api-gateway.storygenartist.com/spotlight-ai-api/process/screenplay`
 
-Accepts a full structured script/screenplay. Performs a complete end-to-end extraction and generation process.
-**Fills Screen 1 + Screen 2 + Screen 3 (AutoFill, Generate Story, and Scene Treatment).**
+Accepts a full structured script/screenplay. Performs a complete end-to-end extraction and generation.
+**Fills Screen 1 + Screen 2 + Screen 3 (AutoFill, Generate Story, Scene Treatment).**
 
 ### Request (multipart/form-data)
 | Field | Type | Notes |
 |---|---|---|
-| `file` | File | The bound script document (PDF/DOCX) |
+| `file` | File | Bound script document (PDF/DOCX/FDX/FOUNTAIN) |
 
 ### Response
 ```json
@@ -713,125 +878,41 @@ Accepts a full structured script/screenplay. Performs a complete end-to-end extr
   "processingMode": "EXTRACTION",
   "suggestedStopScreen": 3,
   "primaryLanding": "SCENE_TREATMENT",
-  "screenScores": {
-    "screen1": 100,
-    "screen2": 100,
-    "screen3": 100
-  },
+  "screenScores": { "screen1": 100, "screen2": 100, "screen3": 100 },
   "data": {
     "autoFill": {
       "projectName": "PK",
       "genre": ["COMEDY", "DRAMA", "SCI_FI"],
       "characterList": [
-        {
-          "name": "PK",
-          "importanceLevel": "LEAD",
-          "role": "PROTAGONIST"
-        },
-        {
-          "name": "Jaggu",
-          "importanceLevel": "SUPPORTING",
-          "role": "SIDEKICK"
-        }
+        { "name": "PK", "importanceLevel": "LEAD", "role": "PROTAGONIST" },
+        { "name": "Jaggu", "importanceLevel": "SUPPORTING", "role": "SIDEKICK" }
       ]
     },
     "generateStory": {
       "story": "Generated scriptment based on screenplay...",
       "logline": "...",
-      "beatSheet": { 
-        "setup": "...",
-        "incitingIncident": "..."
-      },
+      "beatSheet": { "setup": "...", "incitingIncident": "..." },
       "synopsis": "..."
     },
     "generateScenes": {
       "scenes": [
         {
           "sceneSeq": 1,
-          "intExt": "EXT",
-          "dayNight": "NIGHT",
+          "slugline": "EXT. SPACE – NIGHT",
+          "int_ext": "EXT.",
+          "day_night": "NIGHT",
           "location": "SPACE",
-          "pagesEighthsEst": "1 1/8",
-          "visualSummary": "In the vastness of space, millions of twinkling stars...",
-          "slugline": "EXT. SPACE - NIGHT (1 1/8)"
-        },
-        {
-          "sceneSeq": 2,
-          "intExt": "EXT",
-          "dayNight": "NIGHT",
-          "location": "SAMBHAR LAKE",
-          "pagesEighthsEst": "1 2/8",
-          "visualSummary": "A wide barren landscape unfolds, dominated by a small temple...",
-          "slugline": "EXT. SAMBHAR LAKE - NIGHT (1 2/8)"
+          "script_day": "",
+          "pages_eighths_est": "1 1/8",
+          "visual_summary": "In the vastness of space, millions of twinkling stars fill the frame...",
+          "voice_over_tone": "",
+          "image_prompt": "...",
+          "main_image_prompt": "...",
+          "main_video_prompt": "...",
+          "storyBoardList": []
         }
       ]
     }
   }
 }
 ```
-
----
-
-## 10. Content Blocked — AI Safety Filter Response
-
-When input content triggers Azure OpenAI's content safety filters (e.g. terrorism, extreme violence, adult content), the API does **not** return a `500` error. Instead it returns a structured `200` response with `status: BLOCKED`, surfacing the blocked message inside the existing data fields so the client can display a clear message to the user.
-
-This applies to: **`/autofill`** and **`/story`** endpoints.
-
-### Example — Blocked Story Generation
-
-**Request**
-```json
-{
-  "storyIdea": "Generate a detailed story glorifying extreme violence and illegal terrorist activities.",
-  "genre": ["Action"],
-  "storyStructure": "Three-Act",
-  "narrativeStyle": "Realistic",
-  "creativeNotes": "",
-  "endingType": "Happy",
-  "openingSetupIdea": "",
-  "climaxIdea": "",
-  "pace": "Fast",
-  "toneArchetype": "Dark",
-  "theme": "Conflict",
-  "region": "Global",
-  "targetAudience": ["Adults"],
-  "contentSensitivity": "High",
-  "referenceFilmsWorks": ""
-}
-```
-
-**Response**
-```json
-{
-  "status": "BLOCKED",
-  "message": "Content blocked by AI safety filter",
-  "httpStatus": 200,
-  "data": {
-    "story": "I'm sorry, this story could not be generated due to content sensitivity restrictions imposed by the AI safety system.",
-    "logline": "I'm sorry, this story could not be generated due to content sensitivity restrictions imposed by the AI safety system.",
-    "tone": "",
-    "beatSheet": {},
-    "synopsis": "I'm sorry, this story could not be generated due to content sensitivity restrictions imposed by the AI safety system."
-  },
-  "timestamp": "2026-05-03T05:45:12.063505",
-  "usage": {
-    "prompt_tokens": 3892,
-    "completion_tokens": 5911,
-    "total_tokens": 9803,
-    "input_tokens": 3892,
-    "output_tokens": 5911
-  }
-}
-```
-
-| Field | Value | Notes |
-|---|---|---|
-| `status` | `BLOCKED` | Distinguishes from `SUCCESS` |
-| `httpStatus` | `200` | Not a server error — client must check `status` field |
-| `message` | `Content blocked by AI safety filter` | Human-readable reason |
-| `data.story` / `data.storyIdea` | Blocked message string | Reuses existing field — no new attributes added |
-| `usage` | Populated | Token counts still returned even for blocked calls |
-
-> **How to handle on the client side:** Check the `status` field. If `"BLOCKED"`, display the message from `data.story` (or `data.storyIdea` for autofill) to the user as a content restriction notice. Do **not** treat this as an error — the HTTP status is `200`.
-
